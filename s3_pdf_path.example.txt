@@ -1,0 +1,2 @@
+snew   s3://bucket/dir/小城.pdf
+p_hdd  s3://bucket2/dir2/开国大典.pdf
