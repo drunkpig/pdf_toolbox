@@ -5,7 +5,7 @@
 
 import sys
 import click
-from libs.commons import parse_aws_param, parse_bucket_key
+from libs.commons import  read_pdf
 import boto3, json
 from botocore.config import Config
 import fitz
@@ -79,20 +79,6 @@ def pdf_extractable_classfier(s3_pdf_path: str, pdf_bytes: bytes):
         "metadata": doc.metadata
     }
     print(json.dumps(res, ensure_ascii=False))
-
-
-def read_pdf(pdf_path: str, s3_profile: str):
-    if pdf_path.startswith("s3://"):
-        ak, sk, end_point, addressing_style = parse_aws_param(s3_profile)
-        cli = boto3.client(service_name="s3", aws_access_key_id=ak, aws_secret_access_key=sk, endpoint_url=end_point,
-                           config=Config(s3={'addressing_style': addressing_style}))
-        bucket_name, bucket_key = parse_bucket_key(pdf_path)
-        res = cli.get_object(Bucket=bucket_name, Key=bucket_key)
-        file_content = res["Body"].read()
-        return file_content
-    else:
-        with open(pdf_path, "rb") as f:
-            return f.read()
 
 
 @click.command()

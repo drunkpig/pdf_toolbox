@@ -1,4 +1,6 @@
 import os, re, configparser
+
+import boto3
 from loguru import logger
 from boto3.s3.transfer import TransferConfig
 from botocore.config import Config
@@ -31,7 +33,7 @@ def parse_aws_param(profile):
     return ak, sk, endpoint, addressing_style
 
 
-def parse_bucket_key(s3_full_path:str):
+def parse_bucket_key(s3_full_path: str):
     """
     输入 s3://bucket/path/to/my/file.txt
     输出 bucket, path/to/my/file.txt
@@ -44,6 +46,19 @@ def parse_bucket_key(s3_full_path:str):
     bucket, key = s3_full_path.split("/", 1)
     return bucket, key
 
+
+def read_pdf(pdf_path: str, s3_profile: str):
+    if pdf_path.startswith("s3://"):
+        ak, sk, end_point, addressing_style = parse_aws_param(s3_profile)
+        cli = boto3.client(service_name="s3", aws_access_key_id=ak, aws_secret_access_key=sk, endpoint_url=end_point,
+                           config=Config(s3={'addressing_style': addressing_style}))
+        bucket_name, bucket_key = parse_bucket_key(pdf_path)
+        res = cli.get_object(Bucket=bucket_name, Key=bucket_key)
+        file_content = res["Body"].read()
+        return file_content
+    else:
+        with open(pdf_path, "rb") as f:
+            return f.read()
 
 # def get_s3_object(path):
 #     src_cli_config = Config(**{
