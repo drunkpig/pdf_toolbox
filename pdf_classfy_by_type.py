@@ -6,7 +6,7 @@
   2. 只要存在一个页面，图片的数量为0
 二、什么是扫描版pdf，只要满足以下任意一条
   1. ~~80%页面上的最大图大小一样并且面积超过页面面积0.6~~
-  2. 除匹配到文字版的其他所有
+  2. 大部分页面上文字的长度都是相等的。
 
 """
 import click
@@ -15,7 +15,8 @@ import sys
 from loguru import logger
 import numpy as np
 
-TEXT_LEN_THRESHOLD = 100
+TEXT_LEN_THRESHOLD = 200
+TEXT_LEN_SAMPLE_RATIO=0.1 # 抽取0.1的页面进行文字长度统计
 
 
 def mymax(alist: list):
@@ -51,12 +52,12 @@ def classify_by_area(pdf_path, total_page: int, page_width, page_height, img_sz_
 def classify_by_text_len(text_len_list: list, total_page: int):
     """
     随机抽取10%的页面，如果少于5个页面，那么就取全部页面。
-    查看页面上的文字长度，如果有任何一个页面的文字长度大于100，那么就是文字pdf
+    查看页面上的文字长度，如果有任何一个页面的文字长度大于TEXT_LEN_THRESHOLD，那么就是文字pdf
     :param total_page:
     :param text_len_list:
     :return:
     """
-    select_page_cnt = total_page // 10  # 选取10%的页面
+    select_page_cnt = int(total_page*TEXT_LEN_SAMPLE_RATIO)  # 选取10%的页面
     if select_page_cnt < 5:
         select_page_cnt = total_page
 
@@ -107,7 +108,8 @@ def main(json_file):
                 text_len_list = o['text_len_per_page']
                 pdf_path = o['pdf_path']
                 is_encrypted = o['is_encrypted']
-                if is_encrypted:
+                is_needs_password = o['is_needs_password']
+                if is_encrypted or total_page == 0 or is_needs_password:  # 加密的，需要密码的，没有页面的，都不处理
                     continue
                 tag = classify(pdf_path, total_page, page_width, page_height, img_sz_list, text_len_list)
                 o['is_text_pdf'] = tag
