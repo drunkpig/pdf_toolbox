@@ -33,7 +33,7 @@ def get_image_info(doc: fitz.Document) -> list:
 
                 if (x0, y0, x1, y1) in dedup:  # 这里面会出现一些重复的bbox，无需重复出现，需要去掉
                     continue
-                if all([width, height]):  # 长和宽任何一个都不能是0，否则这个图片不可见，没有实际意义
+                if not all([width, height]):  # 长和宽任何一个都不能是0，否则这个图片不可见，没有实际意义
                     continue
                 dedup.add((x0, y0, x1, y1))
 

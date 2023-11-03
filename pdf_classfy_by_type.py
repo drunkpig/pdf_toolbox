@@ -14,6 +14,7 @@ import json
 import sys
 from loguru import logger
 import numpy as np
+from loguru import logger
 
 TEXT_LEN_THRESHOLD = 100
 
@@ -78,7 +79,7 @@ def classify(pdf_path, total_page: int, page_width, page_height, img_sz_list: li
     :return:
     """
     is_text_pdf_1 = classify_by_area(pdf_path, total_page, page_width, page_height, img_sz_list)
-    is_text_pdf_2 = classify_by_text_len(img_sz_list, total_page)
+    is_text_pdf_2 = classify_by_text_len(text_len_list, total_page)
     if all([is_text_pdf_1, is_text_pdf_2]):
         return True
     elif not any([is_text_pdf_1, is_text_pdf_2]):
@@ -114,6 +115,8 @@ def main(json_file):
                 print(json.dumps(o, ensure_ascii=False))
     except Exception as e:
         print("ERROR: ", e, file=sys.stderr)
+        logger.exception(e)
+        
 
 
 if __name__ == "__main__":

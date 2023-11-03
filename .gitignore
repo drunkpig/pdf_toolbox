@@ -2,3 +2,8 @@
 *.log
 *.pyc
 __pycache__
+*.jsonl
+classfied/
+jsonl/
+*.txt
+*.bak
