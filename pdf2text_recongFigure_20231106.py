@@ -83,7 +83,7 @@ def parse_images(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_Doc
                 L, R = min(L, R), max(L, R)
                 U, D = min(U, D), max(U, D)
                 textLine_blocks.append((L, U, R, D))
-    textLine_blocks.sort(key = lambda LURD: (LURD[0], LURD[1]))
+    textLine_blocks.sort(key = lambda LURD: (LURD[1], LURD[0]))
     
 
     #---------------------------------------------- 保存img --------------------------------------------------#
