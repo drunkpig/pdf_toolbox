@@ -8,6 +8,7 @@ from botocore.config import Config
 import fitz
 from loguru import logger
 
+from pdf2text_recongFigure_20231106 import parse_images    #从当前page获取figures的bboxes
 
 def parse_tables(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
     pass
@@ -51,13 +52,13 @@ def main(s3_pdf_path: str, s3_profile: str):
     try:
         pdf_bytes = read_pdf(s3_pdf_path, s3_profile)
         pdf_docs = fitz.open("pdf", pdf_bytes)
-        for page in pdf_docs:
+        for pageID, page in enumerate(pdf_docs):
             # 先解析table
             table_bboxes, table_contents = parse_tables(page)
             exclude_bboxes.append(table_bboxes)
 
             # 解析图片
-            image_bboxes, image_contents = parse_images(page, exclude_bboxes)
+            image_bboxes, image_contents = parse_images(page_ID, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
             exclude_bboxes.append(image_bboxes)
 
             # 解析公式
