@@ -24,6 +24,7 @@ def get_image_info(doc: fitz.Document) -> list:
         items = page.get_images()
         for img in items:
             # 这里返回的是图片在page上的实际展示的大小。返回一个数组，每个元素第一部分是
+            img_bojid = img[0] # 在pdf文件中是全局唯一的，如果这个图反复出现在pdf里那么就可能是垃圾信息，例如水印、页眉页脚等
             recs = page.get_image_rects(img, transform=True)
             if recs:
                 rec = recs[0][0]
@@ -37,7 +38,7 @@ def get_image_info(doc: fitz.Document) -> list:
                     continue
                 dedup.add((x0, y0, x1, y1))
 
-                page_result.append((x0, y0, x1, y1))
+                page_result.append((x0, y0, x1, y1, img_bojid))
 
     return result
 
@@ -77,7 +78,7 @@ def pdf_meta_scan(s3_pdf_path: str, pdf_bytes: bytes):
     is_encrypted = doc.is_encrypted
     total_page = len(doc)
     page_width_pts, page_height_pts = get_pdf_page_size_pts(doc)
-    image_info_every_page = get_image_info(doc)
+    image_info_per_page = get_image_info(doc)
     text_len_per_page = get_pdf_textlen_per_page(doc)
 
     # 最后输出一条json
@@ -88,7 +89,7 @@ def pdf_meta_scan(s3_pdf_path: str, pdf_bytes: bytes):
         "total_page": total_page,
         "page_width_pts": int(page_width_pts),
         "page_height_pts": int(page_height_pts),
-        "image_info_per_page": image_info_every_page,
+        "image_info_per_page": image_info_per_page,
         "text_len_per_page": text_len_per_page,
         "metadata": doc.metadata
     }
