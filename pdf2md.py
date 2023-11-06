@@ -14,8 +14,8 @@ def parse_tables(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[T
     pass
 
 
-def parse_images(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
-    pass
+# def parse_images(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
+#     pass
 
 
 def parse_paragraph(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
