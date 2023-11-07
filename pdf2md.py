@@ -40,10 +40,10 @@ def link2markdown(all_content: list):
     """
     pass
 
-def cut_image(bbox: Tuple,  page_num: int, page: fitz.Page, save_path: str):
+def cut_image(bbox: Tuple, book_id:str,   page_num: int, page: fitz.Page, save_path: str):
     """
     从第page_num页的page中，根据bbox进行裁剪出一张jpg图片，返回图片路径
-    save_path：需要同时支持s3和本地
+    save_path：需要同时支持s3和本地, 图片的命名为  {save_path}/{book_id}_{page_num}_{bbox[0]}_{bbox[1]}_{bbox[2]}_{bbox[3]}.jpg, bbox内数字取整。
     """
     pass
 
