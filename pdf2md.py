@@ -40,10 +40,10 @@ def link2markdown(all_content: list):
     """
     pass
 
-def cut_image(bbox: Tuple, book_id:str,   page_num: int, page: fitz.Page, save_path: str, s3_profile: str):
+def cut_image(bbox: Tuple, book_id:str,   page_num: int, page: fitz.Page, tag:str, save_path: str, s3_profile: str):
     """
     从第page_num页的page中，根据bbox进行裁剪出一张jpg图片，返回图片路径
-    save_path：需要同时支持s3和本地, 图片的命名为  {save_path}/{book_id}_{page_num}_{bbox[0]}_{bbox[1]}_{bbox[2]}_{bbox[3]}.jpg, bbox内数字取整。
+    save_path：需要同时支持s3和本地, 图片的命名为  {save_path}/{book_id}_{page_num}_{tag}_{bbox[0]}_{bbox[1]}_{bbox[2]}_{bbox[3]}.jpg, bbox内数字取整。
     """
     pass
 
@@ -61,13 +61,11 @@ def main(s3_pdf_path: str, s3_profile: str):
         pdf_bytes = read_pdf(s3_pdf_path, s3_profile)
         pdf_docs = fitz.open("pdf", pdf_bytes)
         for pageID, page in enumerate(pdf_docs):
-            # 先解析table
-            table_bboxes, table_contents = parse_tables(page)
-            exclude_bboxes.append(table_bboxes)
 
             # 解析图片
-            image_bboxes, image_contents = parse_images(page_ID, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
+            image_bboxes, table_bboxes = parse_images(page_ID, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
             exclude_bboxes.append(image_bboxes)
+            exclude_bboxes.append(table_bboxes)
 
             # 解析公式
             equations_bboxes, equation_contents = parse_equations(page, exclude_bboxes)

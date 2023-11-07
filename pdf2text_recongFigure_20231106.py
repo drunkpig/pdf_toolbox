@@ -499,5 +499,5 @@ def parse_images(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_Doc
     curPage_all_table_bboxs = table_final_bboxs
     # curPage_all_equation_bboxs = equation_from_DocXChain_bboxs
     
-    return curPage_all_fig_bboxs + curPage_all_table_bboxs, []
+    return curPage_all_fig_bboxs, curPage_all_table_bboxs
 
