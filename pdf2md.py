@@ -40,6 +40,13 @@ def link2markdown(all_content: list):
     """
     pass
 
+def cut_image(bbox: Tuple,  page_num: int, page: fitz.Page, save_path: str):
+    """
+    从第page_num页的page中，根据bbox进行裁剪出一张jpg图片，返回图片路径
+    save_path：需要同时支持s3和本地
+    """
+    pass
+
 
 @click.command()
 @click.option('--s3-pdf-path', help='s3上pdf文件的路径')
@@ -48,6 +55,7 @@ def main(s3_pdf_path: str, s3_profile: str):
     """
 
     """
+    
     exclude_bboxes = []  # 上一阶段产生的bbox，加入到这个里。例如图片产生的bbox,在下一阶段进行表格识别的时候就不能和这些bbox重叠。
     try:
         pdf_bytes = read_pdf(s3_pdf_path, s3_profile)
