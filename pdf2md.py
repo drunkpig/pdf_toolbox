@@ -8,7 +8,7 @@ from botocore.config import Config
 import fitz
 from loguru import logger
 
-from pdf2text_recongFigure_20231106 import parse_images    #从当前page获取figures的bboxes
+from pdf2text_recogFigure_20231106 import parse_images    #从当前page获取figures的bboxes
 
 def parse_tables(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
     pass
