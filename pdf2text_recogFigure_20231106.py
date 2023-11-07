@@ -111,10 +111,10 @@ def parse_images(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_Doc
     img_bad_idxs = []
     for i in range(len(imgs)):
         try:
-            img = page.extract_image(imgs[i][0])
-            pix1 = fitz.Pixmap(img['image'])
+            # img = page.extract_image(imgs[i][0])
+            # pix1 = fitz.Pixmap(img['image'])
             new_img_name = "{}_{}.png".format(page_ID, i)      # 图片name
-            pix1.save(res_dir_path + '/' + new_img_name)        # 把图片存出在新建的文件夹，并命名
+            # pix1.save(res_dir_path + '/' + new_img_name)        # 把图片存出在新建的文件夹，并命名
             img_names.append(new_img_name)                      # 把图片的名字存在list中，方便在md中插入引用
         except:
             img_bad_idxs.append(i)
