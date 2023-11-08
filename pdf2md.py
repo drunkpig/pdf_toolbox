@@ -8,10 +8,12 @@ from botocore.config import Config
 import fitz
 from loguru import logger
 
-from pdf2text_recogFigure_20231106 import parse_images    #从当前page获取figures的bboxes
+from pdf2text_recogFigure_20231107 import parse_images        # 获取figures的bbox
+from pdf2text_recogTable_20231107 import parse_tables         # 获取tables的bbox
+from pdf2text_recogEquation_20231107 import parse_equations    # 获取equations的bbox
 
-def parse_tables(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
-    pass
+# def parse_tables(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
+#     pass
 
 
 # def parse_images(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
@@ -22,14 +24,14 @@ def parse_paragraph(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (lis
     pass
 
 
-def parse_equations(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
-    """
-    解析公式 TODO
-    :param page:
-    :param exclude_bboxes:
-    :return:
-    """
-    return []
+# def parse_equations(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
+#     """
+#     解析公式 TODO
+#     :param page:
+#     :param exclude_bboxes:
+#     :return:
+#     """
+#     return []
 
 
 def link2markdown(all_content: list):
@@ -113,12 +115,15 @@ def main(s3_pdf_path: str, s3_profile: str, save_path: str):
         for pageID, page in enumerate(pdf_docs):
 
             # 解析图片
-            image_bboxes, table_bboxes = parse_images(page_ID, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
+            image_bboxes  = parse_images(page_ID, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
             exclude_bboxes.append(image_bboxes)
+
+            # 解析表格
+            table_bboxes  = parse_tables(page_ID, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
             exclude_bboxes.append(table_bboxes)
 
             # 解析公式
-            equations_bboxes = parse_equations(page, exclude_bboxes)
+            equations_bboxes = parse_equations(page_ID, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
             exclude_bboxes.append(equations_bboxes)
             
             # 把图、表、公式都进行截图，保存到本地，返回图片路径作为内容
