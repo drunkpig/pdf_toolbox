@@ -12,26 +12,10 @@ from pdf2text_recogFigure_20231107 import parse_images        # 获取figures的
 from pdf2text_recogTable_20231107 import parse_tables         # 获取tables的bbox
 from pdf2text_recogEquation_20231107 import parse_equations    # 获取equations的bbox
 
-# def parse_tables(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
-#     pass
-
-
-# def parse_images(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
-#     pass
 
 
 def parse_paragraph(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
     pass
-
-
-# def parse_equations(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
-#     """
-#     解析公式 TODO
-#     :param page:
-#     :param exclude_bboxes:
-#     :return:
-#     """
-#     return []
 
 
 def link2markdown(all_content: list):
@@ -94,12 +78,6 @@ def get_images_by_bboxes(book_name:str, page_num:int, page: fitz.Page, save_path
         ret[bbox] = image_path
         
     return ret
-        
-
-
-
-
-
         
 
 @click.command()
