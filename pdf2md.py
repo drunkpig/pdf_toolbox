@@ -95,7 +95,11 @@ def get_images_by_bboxes(book_name:str, page_num:int, page: fitz.Page, save_path
         
     return ret
         
-        
+
+
+
+
+
         
 
 @click.command()
@@ -108,26 +112,27 @@ def main(s3_pdf_path: str, s3_profile: str, save_path: str):
     """
     book_name = os.path.basename(s3_pdf_path).split(".")[0]
     exclude_bboxes = []  # 上一阶段产生的bbox，加入到这个里。例如图片产生的bbox,在下一阶段进行表格识别的时候就不能和这些bbox重叠。
+    res_dir_path = None
     
     try:
         pdf_bytes = read_pdf(s3_pdf_path, s3_profile)
         pdf_docs = fitz.open("pdf", pdf_bytes)
-        for pageID, page in enumerate(pdf_docs):
+        for page_id, page in enumerate(pdf_docs):
 
             # 解析图片
-            image_bboxes  = parse_images(page_ID, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
+            image_bboxes  = parse_images(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
             exclude_bboxes.append(image_bboxes)
 
             # 解析表格
-            table_bboxes  = parse_tables(page_ID, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
+            table_bboxes  = parse_tables(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
             exclude_bboxes.append(table_bboxes)
 
             # 解析公式
-            equations_bboxes = parse_equations(page_ID, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
+            equations_bboxes = parse_equations(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
             exclude_bboxes.append(equations_bboxes)
             
             # 把图、表、公式都进行截图，保存到本地，返回图片路径作为内容
-            images_box_path_dict = get_images_by_bboxes(book_name, pageID, page, save_path, s3_profile, image_bboxes, table_bboxes, equations_bboxes)
+            images_box_path_dict = get_images_by_bboxes(book_name, page_id, page, save_path, s3_profile, image_bboxes, table_bboxes, equations_bboxes)
             
             # 解析文字段落
             text_bboxes, text_content = parse_paragraph(page, exclude_bboxes)
