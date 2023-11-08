@@ -45,9 +45,27 @@ def cut_image(bbox: Tuple, page_num: int, page: fitz.Page, save_parent_path: str
     从第page_num页的page中，根据bbox进行裁剪出一张jpg图片，返回图片路径
     save_path：需要同时支持s3和本地, 图片存放在save_path下，文件名是: {page_num}_{bbox[0]}_{bbox[1]}_{bbox[2]}_{bbox[3]}.jpg
     """
+    # 将坐标转换为fitz.Rect对象
+    rect = fitz.Rect(*bbox)
+    # 配置缩放倍数为3倍
+    zoom = fitz.Matrix(3, 3)
+    # 截取图片
+    pix = page.get_pixmap(clip=rect, matrix=zoom)
+    # 拼接路径
     image_save_path = os.path.join(save_parent_path, f"{page_num}_{bbox[0]}_{bbox[1]}_{bbox[2]}_{bbox[3]}.jpg")
-    # TODO
-    
+    # 打印图片文件名
+    # print(f"Saved {image_save_path}")
+    if image_save_path.startswith("s3://"):
+        ak, sk, end_point, addressing_style = parse_aws_param(s3_profile)
+        cli = boto3.client(service_name="s3", aws_access_key_id=ak, aws_secret_access_key=sk, endpoint_url=end_point,
+                           config=Config(s3={'addressing_style': addressing_style}))
+        bucket_name, bucket_key = parse_bucket_key(image_save_path)
+        # 将字节流上传到s3
+        cli.upload_fileobj(pix.tobytes(output='jpeg', jpg_quality=95), bucket_name, bucket_key)
+    else:
+        # 保存图片到本地
+        pix.save(image_save_path, jpg_quality=95)
+
     return image_save_path
 
 def get_images_by_bboxes(book_name:str, page_num:int, page: fitz.Page, save_path:str, s3_profile:str, image_bboxes:list, table_bboxes:list, equation_bboxes:list) -> dict:
