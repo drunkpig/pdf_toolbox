@@ -108,9 +108,11 @@ def main(s3_pdf_path: str, s3_profile: str, save_path: str):
             
             # 解析文字段落
             text_bboxes, text_content = parse_paragraph(page, exclude_bboxes)
+            
 
             # 最后一步，根据bbox进行从左到右，从上到下的排序，之后拼接起来
             # 排序 TODO
+            
 
             # 拼接内容 TODO
 
