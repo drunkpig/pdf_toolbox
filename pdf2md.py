@@ -45,7 +45,7 @@ def link2markdown(all_content: list):
 def cut_image(bbox: Tuple, page_num: int, page: fitz.Page, save_parent_path: str, s3_profile: str):
     """
     从第page_num页的page中，根据bbox进行裁剪出一张jpg图片，返回图片路径
-    save_path：需要同时支持s3和本地, 图片存放在save_path下，文件名是: {page_num}_{bbox[0]}_{bbox[1]}_{bbox[2]}_{bbox[3]}.jpg
+    save_path：需要同时支持s3和本地, 图片存放在save_path下，文件名是: {page_num}_{bbox[0]}_{bbox[1]}_{bbox[2]}_{bbox[3]}.jpg , bbox内数字取整。
     """
     # 将坐标转换为fitz.Rect对象
     rect = fitz.Rect(*bbox)
@@ -54,7 +54,7 @@ def cut_image(bbox: Tuple, page_num: int, page: fitz.Page, save_parent_path: str
     # 截取图片
     pix = page.get_pixmap(clip=rect, matrix=zoom)
     # 拼接路径
-    image_save_path = os.path.join(save_parent_path, f"{page_num}_{bbox[0]}_{bbox[1]}_{bbox[2]}_{bbox[3]}.jpg")
+    image_save_path = os.path.join(save_parent_path, f"{page_num}_{int(bbox[0])}_{int(bbox[1])}_{int(bbox[2])}_{int(bbox[3])}.jpg")
     # 打印图片文件名
     # print(f"Saved {image_save_path}")
     if image_save_path.startswith("s3://"):
