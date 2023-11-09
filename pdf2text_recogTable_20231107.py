@@ -55,7 +55,7 @@ def parse_tables(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_Doc
         table_final_bboxs.append((L, U, R, D))
         table_ID += 1
         
-
+    table_final_bboxs.sort(key = lambda LURD: (LURD[1], LURD[0]))
     curPage_all_table_bboxs = table_final_bboxs
     return curPage_all_table_bboxs
 
