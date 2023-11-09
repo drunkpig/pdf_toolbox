@@ -435,7 +435,7 @@ def parse_images(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_Doc
     ## 比对svgs
     for i, b1 in enumerate(figure_bbox_from_DocXChain):
         L1, U1, R1, D1 = b1
-        for b2 in svg_final_bboxs:
+        for b2 in svg_final_bboxs_2:
             L2, U2, R2, D2 = b2
             # 相同
             if check_rect1_sameWith_rect2(L1, U1, R1, D1, L2, U2, R2, D2) == True:
@@ -468,7 +468,9 @@ def parse_images(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_Doc
             figure_only_from_DocXChain_visited.append(False)
             figure_only_ID += 1
     
-
+    img_bboxs.sort(key = lambda LURD: (LURD[1], LURD[0]))
+    svg_final_bboxs_2.sort(key = lambda LURD: (LURD[1], LURD[0]))
+    figure_only_from_DocXChain_bboxs.sort(key = lambda LURD: (LURD[1], LURD[0]))
     curPage_all_fig_bboxs = img_bboxs + svg_final_bboxs + figure_only_from_DocXChain_bboxs
     return curPage_all_fig_bboxs
 
