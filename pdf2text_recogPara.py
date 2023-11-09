@@ -1,6 +1,9 @@
-import numpy as np
-import fitz  # PyMuPDF
+import os
+import sys
+import json
 
+import fitz  # PyMuPDF
+import numpy as np
 
 def open_pdf(pdf_path):
     try:
@@ -12,6 +15,32 @@ def open_pdf(pdf_path):
 
 
 def calculate_avg_values(x0_values, x1_values, char_widths, line_heights):
+    """
+    This function calculates the average values of the x0, x1, char_width and line_height
+
+    Parameters
+    ----------
+    x0_values : list
+        x0 values of the bbox
+    x1_values : list
+        x1 values of the bbox
+    char_widths : list
+        char widths of the bbox
+    line_heights : list
+        line heights of the bbox
+
+    Returns
+    -------
+    X0 : float
+        median of x0 values
+    X1 : float
+        median of x1 values
+    avg_char_width : float
+        average of char widths
+    avg_char_height : float
+        average of line heights
+
+    """
     X0 = np.median(x0_values) if x0_values else 0
     X1 = np.median(x1_values) if x1_values else 0
     avg_char_width = sum(char_widths) / len(char_widths) if char_widths else 0
@@ -23,6 +52,33 @@ def calculate_avg_values(x0_values, x1_values, char_widths, line_heights):
 def collect_bbox_values(
     combined_lines, x0_values, x1_values, char_widths, line_heights
 ):
+    """
+    This function collects the bbox values of the combined lines
+
+    Parameters
+    ----------
+    combined_lines : list
+        combined lines
+    x0_values : list
+        x0 values of the bbox
+    x1_values : list
+        x1 values of the bbox
+    char_widths : list
+        char widths of the bbox
+    line_heights : list
+        line heights of the bbox
+
+    Returns
+    -------
+    x0_values : list
+        x0 values of the bbox
+    x1_values : list
+        x1 values of the bbox
+    char_widths : list
+        char widths of the bbox
+    line_heights : list
+        line heights of the bbox
+    """
     for i, line in enumerate(combined_lines[1:-1], 1):  # 跳过首行和末行
         bbox = line["bbox"]
         text = line["text"]
@@ -45,6 +101,26 @@ def collect_bbox_values(
 
 
 def calculate_paragraph_metrics(combined_lines):
+    """
+    This function calculates the paragraph metrics
+    
+    Parameters
+    ----------
+    combined_lines : list
+        combined lines
+
+    Returns
+    -------
+    X0 : float
+        median of x0 values
+    X1 : float
+        median of x1 values
+    avg_char_width : float
+        average of char widths
+    avg_char_height : float
+        average of line heights
+
+    """
     x0_values = []
     x1_values = []
     char_widths = []
@@ -59,6 +135,22 @@ def calculate_paragraph_metrics(combined_lines):
 
 
 def combine_lines(block, y_tolerance):
+    """
+    This function combines the lines of the block
+    
+    Parameters
+    ----------
+    block : dict
+        block
+    y_tolerance : float
+        y tolerance
+
+    Returns
+    -------
+    combined_lines : list
+        combined lines
+
+    """
     combined_lines = []  # 用于存储合并后的lines
     current_line = None
     for line in block["lines"]:
@@ -180,6 +272,21 @@ def draw_paragraph_border(page, para_color, start_of_para, end_of_para, combined
 
 
 def draw_blocks_lines_spans(pdf_path, output_pdf_path):
+    """
+    绘制文本块、行、字的边框.
+    
+    Parameters
+    ----------
+    pdf_path : str
+        pdf文件路径
+    output_pdf_path : str
+        输出pdf文件路径
+    
+    
+    Returns
+    -------
+    None.
+    """
     block_color = (1, 0, 1)  # 蓝色
     para_color = (0, 1, 1)  # 青色
 
@@ -252,24 +359,6 @@ def is_bbox_overlap(bbox1, bbox2):
     return True
 
 
-# pageID_imageBboxs = [[(37.5, 651.3200073242188, 557.5, 790.8300170898438)], [(69, 771, 119, 789)], [], [(152.16000366210938, 188.3996124267578, 458.8800048828125, 330.4796142578125), (200.57258064516128, 499.0322580645161, 339.67863247863244, 627.5418803418803)], [(88.29032258064515, 246.63709677419354, 288.822792022792, 608.8307692307692)], [(168.42338709677418, 118.04032258064515, 439.9509971509971, 246.60284900284898), (155.94758064516128, 341.1653225806451, 452.4250712250712, 434.67350427350425)], [], []]
-
-# pageID_tableBboxs = [[], [], [], [], [], [(71.9758064516129, 534.0604838709677, 520.5527065527065, 717.7390313390313)], [(79.17338709677419, 503.8306451612903, 517.674074074074, 736.4501424501424), (71.01612903225806, 296.5403225806451, 525.3504273504273, 392.45356125356125)], []]
-
-# pageID_equationBboxs= [[], [], [(222.16532258064515, 588.7620967741935, 524.3908831908832, 608.8307692307692), (247.59677419354836, 511.9879032258064, 524.8706552706552, 525.8301994301994)], [], [], [], [], []]
-
-# 解析文本段落是一个中间过程
-# 一、解析文本段落的前置操作
-#   1. 获取整个页面的 bbox，记为 page_bbox
-#   2. 获取图片、表格、公式的 bbox， 分别记为 image_bboxes, table_bboxes, equations_bboxes
-#   3. 从bbox中排除掉图片、表格、公式的 bbox，其中：
-#     3.1 对于图片、表格，直接从 page_bbox 中删除
-#     3.2 对于公式，将 equations_inline_bboxes, equations_btw_bboxes 分别替换为 $equation_inline$, $equation_interline$ 这样的占位符
-#   4. 执行解析文字段落 parse_paragraph， 返回值是 text_bboxes, text_content
-# 二、解析文本段落的后续操作
-#   5. 将 text_bboxes, text_content 与 image_bboxes, table_bboxes, equations_bboxes 排序、合并，得到最终的 bbox 和内容
-
-
 def parse_paragraph(
     page,
     page_id,
@@ -302,7 +391,6 @@ def parse_paragraph(
         文字段落的内容
     """
 
-
     page_key = f"page_{page_id}"
     result_dict = {page_key: {}}
 
@@ -314,9 +402,7 @@ def parse_paragraph(
         if block["type"] == 0:  # 只处理文本块
             bbox = block["bbox"]
             text = " ".join(
-                span["text"] 
-                for line in block["lines"]
-                for span in line["spans"]
+                span["text"] for line in block["lines"] for span in line["spans"]
             )
 
             # 检查是否被图片或者表格的 bbox 覆盖
@@ -327,8 +413,7 @@ def parse_paragraph(
                 continue
 
             flag = 1
-            
-            
+
             if len(equations_inline_bboxes) > 0:
                 # 替换公式的 bbox
                 for eq_inline_bbox in equations_inline_bboxes:
@@ -348,9 +433,7 @@ def parse_paragraph(
 
     result_dict[page_key]["bboxes_para"] = page_bboxes_para
 
-
     return result_dict
-
 
 
 def get_test_data(file_path, print_data=False):
@@ -370,8 +453,7 @@ def get_test_data(file_path, print_data=False):
     pageID_imageBboxs = data["pageID_imageBboxs"]
     pageID_tableBboxs = data["pageID_tableBboxs"]
     pageID_equationBboxs = data["pageID_equationBboxs"]
-    
-    
+
     if not print_data:
         for pageID, (imageBboxs, tableBboxs, equationBboxs) in enumerate(
             zip(pageID_imageBboxs, pageID_tableBboxs, pageID_equationBboxs)
@@ -382,7 +464,8 @@ def get_test_data(file_path, print_data=False):
             print(f"equationBboxs: {equationBboxs}")
             print()
 
-    return  pageID_imageBboxs, pageID_tableBboxs, pageID_equationBboxs
+    return pageID_imageBboxs, pageID_tableBboxs, pageID_equationBboxs
+
 
 from pdf2text_recogFigure_20231107 import parse_images  # 获取figures的bbox
 from pdf2text_recogTable_20231107 import parse_tables  # 获取tables的bbox
@@ -390,23 +473,28 @@ from pdf2text_recogEquation_20231108 import parse_equations  # 获取equations�
 
 
 if __name__ == "__main__":
-    import sys
-
     pdf_path = sys.argv[1]
+    output_pdf_path = sys.argv[2]
     
-    # output_pdf_path = sys.argv[2]
-    # draw_blocks_lines_spans(pdf_path, output_pdf_path)
+    if os.path.exists(output_pdf_path):
+        os.remove(output_pdf_path)
 
     pdf_doc = open_pdf(pdf_path)
 
     test_json_file = "test\\assets\\paper\\images_tables_equations.json"
-    pageID_imageBboxs, pageID_tableBboxs, pageID_interline_equationBboxs = get_test_data(test_json_file, print_data=False)
+    (
+        pageID_imageBboxs,
+        pageID_tableBboxs,
+        pageID_interline_equationBboxs,
+    ) = get_test_data(test_json_file, print_data=False)
     pageID_inline_equationBboxs = []
-    
-    print(f"pageID_imageBboxs: {pageID_imageBboxs}")
-    print(f"pageID_tableBboxs: {pageID_tableBboxs}")
-    print(f"pageID_equationBboxs: {pageID_interline_equationBboxs}")
-    
+
+    # print(f"pageID_imageBboxs: {pageID_imageBboxs}")
+    # print(f"pageID_tableBboxs: {pageID_tableBboxs}")
+    # print(f"pageID_equationBboxs: {pageID_interline_equationBboxs}")
+
+    pdf_dic = {}
+
     for page_id, page in enumerate(pdf_doc):
         result_dict = parse_paragraph(
             page,
@@ -416,4 +504,36 @@ if __name__ == "__main__":
             pageID_inline_equationBboxs,
             pageID_interline_equationBboxs[page_id],
         )
-        print(result_dict)
+
+        page_key = f"page_{page_id}"
+        pdf_dic[page_key] = result_dict[page_key]
+
+    # print the pdf_dic in a human-readable format
+    print(json.dumps(pdf_dic, indent=4, ensure_ascii=False))
+
+    for page_id, page in enumerate(pdf_doc):
+        page_key = f"page_{page_id}"
+        page_bboxes_para = pdf_dic[page_key]["bboxes_para"]
+        for para_id, para in enumerate(page_bboxes_para):
+            para_key = f"para_{para_id}"
+            para_bbox = pdf_dic[page_key][para_key]["bbox"]
+            para_text = pdf_dic[page_key][para_key]["text"]
+            para_flag = pdf_dic[page_key][para_key]["flag"]
+
+            if para_flag == 1:
+                para_rect = fitz.Rect(para_bbox)
+                para_annot = page.add_rect_annot(para_rect)
+                para_annot.set_colors(stroke=(0, 1, 1))
+                para_annot.set_border(width=2)
+
+                para_annot.update()
+            else:
+                para_rect = fitz.Rect(para_bbox)
+                para_annot = page.add_rect_annot(para_rect)
+                para_annot.set_colors(stroke=(1, 0, 1))
+                para_annot.set_border(width=2)
+
+                para_annot.update()
+
+    pdf_doc.save(output_pdf_path)
+    pdf_doc.close()
