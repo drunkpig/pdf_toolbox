@@ -10,7 +10,7 @@ from loguru import logger
 
 from pdf2text_recogFigure_20231107 import parse_images        # 获取figures的bbox
 from pdf2text_recogTable_20231107 import parse_tables         # 获取tables的bbox
-from pdf2text_recogEquation_20231107 import parse_equations    # 获取equations的bbox
+from pdf2text_recogEquation_20231108 import parse_equations    # 获取equations的bbox
 
 
 
