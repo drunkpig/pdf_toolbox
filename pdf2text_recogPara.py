@@ -8,7 +8,7 @@ def open_pdf(pdf_path):
         return pdf_document
     except Exception as e:
         print(f"无法打开PDF文件：{pdf_path}。原因是：{e}")
-        return None
+        raise e
 
 
 def calculate_avg_values(x0_values, x1_values, char_widths, line_heights):
@@ -252,6 +252,12 @@ def is_bbox_overlap(bbox1, bbox2):
     return True
 
 
+# pageID_imageBboxs = [[(37.5, 651.3200073242188, 557.5, 790.8300170898438)], [(69, 771, 119, 789)], [], [(152.16000366210938, 188.3996124267578, 458.8800048828125, 330.4796142578125), (200.57258064516128, 499.0322580645161, 339.67863247863244, 627.5418803418803)], [(88.29032258064515, 246.63709677419354, 288.822792022792, 608.8307692307692)], [(168.42338709677418, 118.04032258064515, 439.9509971509971, 246.60284900284898), (155.94758064516128, 341.1653225806451, 452.4250712250712, 434.67350427350425)], [], []]
+
+# pageID_tableBboxs = [[], [], [], [], [], [(71.9758064516129, 534.0604838709677, 520.5527065527065, 717.7390313390313)], [(79.17338709677419, 503.8306451612903, 517.674074074074, 736.4501424501424), (71.01612903225806, 296.5403225806451, 525.3504273504273, 392.45356125356125)], []]
+
+# pageID_equationBboxs= [[], [], [(222.16532258064515, 588.7620967741935, 524.3908831908832, 608.8307692307692), (247.59677419354836, 511.9879032258064, 524.8706552706552, 525.8301994301994)], [], [], [], [], []]
+
 # 解析文本段落是一个中间过程
 # 一、解析文本段落的前置操作
 #   1. 获取整个页面的 bbox，记为 page_bbox
@@ -266,11 +272,11 @@ def is_bbox_overlap(bbox1, bbox2):
 
 def parse_paragraph(
     page,
-    page_num,
+    page_id,
     image_bboxes,
     table_bboxes,
     equations_inline_bboxes,
-    equations_btw_bboxes,
+    equations_interline_bboxes,
 ):
     """
     解析文字段落
@@ -285,7 +291,7 @@ def parse_paragraph(
         表格的 bbox
     equations_inline_bboxes : list
         行内公式的 bbox
-    equations_btw_bboxes : list
+    equations_interline_bboxes : list
         行间公式的 bbox
 
     Returns
@@ -296,7 +302,8 @@ def parse_paragraph(
         文字段落的内容
     """
 
-    page_key = f"page_{page_num}"
+
+    page_key = f"page_{page_id}"
     result_dict = {page_key: {}}
 
     blocks = page.get_text("dict")["blocks"]
@@ -306,7 +313,11 @@ def parse_paragraph(
     for block in blocks:
         if block["type"] == 0:  # 只处理文本块
             bbox = block["bbox"]
-            text = " ".join([line["text"] for line in block["lines"]])
+            text = " ".join(
+                span["text"] 
+                for line in block["lines"]
+                for span in line["spans"]
+            )
 
             # 检查是否被图片或者表格的 bbox 覆盖
             if any(
@@ -316,13 +327,16 @@ def parse_paragraph(
                 continue
 
             flag = 1
-            # 替换公式的 bbox
-            for eq_inline_bbox in equations_inline_bboxes:
-                if is_bbox_overlap(bbox, eq_inline_bbox):
-                    text = text.replace(eq_inline_bbox, "$equation_inline$")
-                    flag = 0
+            
+            
+            if len(equations_inline_bboxes) > 0:
+                # 替换公式的 bbox
+                for eq_inline_bbox in equations_inline_bboxes:
+                    if is_bbox_overlap(bbox, eq_inline_bbox):
+                        text = text.replace(eq_inline_bbox, "$equation_inline$")
+                        flag = 0
 
-            for eq_btw_bbox in equations_btw_bboxes:
+            for eq_btw_bbox in equations_interline_bboxes:
                 if is_bbox_overlap(bbox, eq_btw_bbox):
                     text = text.replace(eq_btw_bbox, "$equation_interline$")
                     flag = 0
@@ -334,44 +348,72 @@ def parse_paragraph(
 
     result_dict[page_key]["bboxes_para"] = page_bboxes_para
 
+
     return result_dict
 
 
 
-from pdf2text_recogFigure_20231107 import parse_images        # 获取figures的bbox
-from pdf2text_recogTable_20231107 import parse_tables         # 获取tables的bbox
-from pdf2text_recogEquation_20231108 import parse_equations    # 获取equations的bbox
+def get_test_data(file_path, print_data=False):
+    """
+    从文件中获取测试数据
+    """
+    import json
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # read value from data by keys: pageID_imageBboxs、pageID_tableBboxs、pageID_equationBboxs
+    pageID_imageBboxs = []
+    pageID_tableBboxs = []
+    pageID_equationBboxs = []
+
+    pageID_imageBboxs = data["pageID_imageBboxs"]
+    pageID_tableBboxs = data["pageID_tableBboxs"]
+    pageID_equationBboxs = data["pageID_equationBboxs"]
+    
+    
+    if not print_data:
+        for pageID, (imageBboxs, tableBboxs, equationBboxs) in enumerate(
+            zip(pageID_imageBboxs, pageID_tableBboxs, pageID_equationBboxs)
+        ):
+            print(f"pageID: {pageID}")
+            print(f"imageBboxs: {imageBboxs}")
+            print(f"tableBboxs: {tableBboxs}")
+            print(f"equationBboxs: {equationBboxs}")
+            print()
+
+    return  pageID_imageBboxs, pageID_tableBboxs, pageID_equationBboxs
+
+from pdf2text_recogFigure_20231107 import parse_images  # 获取figures的bbox
+from pdf2text_recogTable_20231107 import parse_tables  # 获取tables的bbox
+from pdf2text_recogEquation_20231108 import parse_equations  # 获取equations的bbox
 
 
 if __name__ == "__main__":
     import sys
 
     pdf_path = sys.argv[1]
-    output_pdf_path = sys.argv[2]
+    
+    # output_pdf_path = sys.argv[2]
     # draw_blocks_lines_spans(pdf_path, output_pdf_path)
-    
+
     pdf_doc = open_pdf(pdf_path)
+
+    test_json_file = "test\\assets\\paper\\images_tables_equations.json"
+    pageID_imageBboxs, pageID_tableBboxs, pageID_interline_equationBboxs = get_test_data(test_json_file, print_data=False)
+    pageID_inline_equationBboxs = []
     
-    for page_id, page in enumerate(pdf_doc): # type: ignore
-        
-        
-        """ # 解析图片
-        image_bboxes  = parse_images(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
-        #exclude_bboxes.append(image_bboxes)
-
-        # 解析表格
-        table_bboxes  = parse_tables(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
-        #exclude_bboxes.append(table_bboxes)
-
-        # 解析公式
-        equations_inline_bboxes, equations_btw_bboxes = parse_equations(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
-        #exclude_bboxes.append(equations_bboxes)
-        
-        # 把图、表、公式都进行截图，保存到本地，返回图片路径作为内容
-        images_box_path_dict = get_images_by_bboxes(book_name, page_id, page, save_path, s3_profile, image_bboxes, table_bboxes, equations_bboxes)
-        
-        # 解析文字段落
-        text_bboxes, text_content = parse_paragraph(page, image_bboxes, table_bboxes, equations_inline_bboxes, equations_btw_bboxes,)
-        """
-        
-        print(page_id)
+    print(f"pageID_imageBboxs: {pageID_imageBboxs}")
+    print(f"pageID_tableBboxs: {pageID_tableBboxs}")
+    print(f"pageID_equationBboxs: {pageID_interline_equationBboxs}")
+    
+    for page_id, page in enumerate(pdf_doc):
+        result_dict = parse_paragraph(
+            page,
+            page_id,
+            pageID_imageBboxs[page_id],
+            pageID_tableBboxs[page_id],
+            pageID_inline_equationBboxs,
+            pageID_interline_equationBboxs[page_id],
+        )
+        print(result_dict)

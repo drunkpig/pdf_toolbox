@@ -11,7 +11,7 @@ from loguru import logger
 from pdf2text_recogFigure_20231107 import parse_images        # 获取figures的bbox
 from pdf2text_recogTable_20231107 import parse_tables         # 获取tables的bbox
 from pdf2text_recogEquation_20231108 import parse_equations    # 获取equations的bbox
-
+from pdf2text_recogPara import parse_paragraph                 # 获取paragraph的bbox
 
 
 def parse_paragraph(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
@@ -113,7 +113,7 @@ def main(s3_pdf_path: str, s3_profile: str, save_path: str):
             images_box_path_dict = get_images_by_bboxes(book_name, page_id, page, save_path, s3_profile, image_bboxes, table_bboxes, equations_bboxes)
             
             # 解析文字段落
-            text_bboxes, text_content = parse_paragraph(page, image_bboxes, table_bboxes, equations_inline_bboxes, equations_btw_bboxes,)
+            text_bboxes, text_content = parse_paragraph(page, page_id, image_bboxes, table_bboxes, equations_inline_bboxes, equations_btw_bboxes)
             
 
             # 最后一步，根据bbox进行从左到右，从上到下的排序，之后拼接起来
