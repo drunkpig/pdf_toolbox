@@ -340,7 +340,7 @@ def parse_paragraph(
 
 from pdf2text_recogFigure_20231107 import parse_images        # 获取figures的bbox
 from pdf2text_recogTable_20231107 import parse_tables         # 获取tables的bbox
-from pdf2text_recogEquation_20231107 import parse_equations    # 获取equations的bbox
+from pdf2text_recogEquation_20231108 import parse_equations    # 获取equations的bbox
 
 
 if __name__ == "__main__":
@@ -348,12 +348,14 @@ if __name__ == "__main__":
 
     pdf_path = sys.argv[1]
     output_pdf_path = sys.argv[2]
-    draw_blocks_lines_spans(pdf_path, output_pdf_path)
+    # draw_blocks_lines_spans(pdf_path, output_pdf_path)
     
     pdf_doc = open_pdf(pdf_path)
     
     for page_id, page in enumerate(pdf_doc): # type: ignore
-        # 解析图片
+        
+        
+        """ # 解析图片
         image_bboxes  = parse_images(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
         #exclude_bboxes.append(image_bboxes)
 
@@ -370,4 +372,6 @@ if __name__ == "__main__":
         
         # 解析文字段落
         text_bboxes, text_content = parse_paragraph(page, image_bboxes, table_bboxes, equations_inline_bboxes, equations_btw_bboxes,)
+        """
         
+        print(page_id)
