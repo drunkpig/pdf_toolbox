@@ -36,7 +36,7 @@ def calculate_overlapRatio_between_rect1_and_rect2(L1: float, U1: float, R1: flo
     return square_overlap / square_1, square_overlap / square_2
 
 def calculate_overlapRatio_between_line1_and_line2(L1: float, R1: float, L2: float, R2: float) -> (float, float):
-    # 计算两个rect，重叠面积各占2个rect面积的比例
+    # 计算两个line，重叠line各占2个line长度的比例
     if max(L1, L2) > min(R1, R2):
         return 0, 0
     if L1 == R1 or L2 == R2:
