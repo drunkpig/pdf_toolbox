@@ -396,8 +396,8 @@ def parse_images(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_Doc
     for xf in xf_json['layout_dets']:
     # {0: 'title', 1: 'figure', 2: 'plain text', 3: 'header', 4: 'page number', 5: 'footnote', 6: 'footer', 7: 'table', 8: 'table caption', 9: 'figure caption', 10: 'equation', 11: 'full column', 12: 'sub column'}
         L = xf['poly'][0] / LR_scaleRatio
-        U = xf['poly'][1] / LR_scaleRatio
-        R = xf['poly'][2] / UD_scaleRatio
+        U = xf['poly'][1] / UD_scaleRatio
+        R = xf['poly'][2] / LR_scaleRatio
         D = xf['poly'][5] / UD_scaleRatio
         L += pageL          # 有的页面，artBox偏移了。不在（0,0）
         R += pageL
