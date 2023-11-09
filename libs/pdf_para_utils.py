@@ -87,16 +87,6 @@ def combine_lines(block, y_tolerance):
     return combined_lines
 
 
-def draw_block_border(page, block_color, block):
-    if block["type"] == 0:  # 只处理文本块
-        block_bbox = block["bbox"]
-        block_rect = fitz.Rect(block_bbox)
-        block_annot = page.add_rect_annot(block_rect)
-        block_annot.set_colors(stroke=block_color)
-        block_annot.set_border(width=2)  # 增加block边框宽度
-        block_annot.update()
-
-
 def is_regular_line(
     line_bbox, prev_line_bbox, next_line_bbox, avg_char_height, X0, X1, avg_char_width
 ):
@@ -160,6 +150,16 @@ def is_possible_end_of_para(line_bbox, next_line_bbox, X0, X1, avg_char_width):
     elif x0_near_X0 and x1_smaller_than_X1 and next_line_is_start_of_para:
         return True
     return False
+
+
+def draw_block_border(page, block_color, block):
+    if block["type"] == 0:  # 只处理文本块
+        block_bbox = block["bbox"]
+        block_rect = fitz.Rect(block_bbox)
+        block_annot = page.add_rect_annot(block_rect)
+        block_annot.set_colors(stroke=block_color)
+        block_annot.set_border(width=2)  # 增加block边框宽度
+        block_annot.update()
 
 
 def draw_paragraph_border(page, para_color, start_of_para, end_of_para, combined_lines):
@@ -240,9 +240,134 @@ def draw_blocks_lines_spans(pdf_path, output_pdf_path):
     pdf_document.close()
 
 
+def is_bbox_overlap(bbox1, bbox2):
+    x0_1, y0_1, x1_1, y1_1 = bbox1
+    x0_2, y0_2, x1_2, y1_2 = bbox2
+
+    if x0_1 > x1_2 or x0_2 > x1_1:
+        return False
+    if y0_1 < y1_2 or y0_2 < y1_1:
+        return False
+
+    return True
+
+
+# 解析文本段落是一个中间过程
+# 一、解析文本段落的前置操作
+#   1. 获取整个页面的 bbox，记为 page_bbox
+#   2. 获取图片、表格、公式的 bbox， 分别记为 image_bboxes, table_bboxes, equations_bboxes
+#   3. 从bbox中排除掉图片、表格、公式的 bbox，其中：
+#     3.1 对于图片、表格，直接从 page_bbox 中删除
+#     3.2 对于公式，将 equations_inline_bboxes, equations_btw_bboxes 分别替换为 $equation_inline$, $equation_interline$ 这样的占位符
+#   4. 执行解析文字段落 parse_paragraph， 返回值是 text_bboxes, text_content
+# 二、解析文本段落的后续操作
+#   5. 将 text_bboxes, text_content 与 image_bboxes, table_bboxes, equations_bboxes 排序、合并，得到最终的 bbox 和内容
+
+
+def parse_paragraph(
+    page,
+    page_num,
+    image_bboxes,
+    table_bboxes,
+    equations_inline_bboxes,
+    equations_btw_bboxes,
+):
+    """
+    解析文字段落
+
+    Parameters
+    ----------
+    page : fitz.Page
+        一个页面
+    image_bboxes : list
+        图片的 bbox
+    table_bboxes : list
+        表格的 bbox
+    equations_inline_bboxes : list
+        行内公式的 bbox
+    equations_btw_bboxes : list
+        行间公式的 bbox
+
+    Returns
+    -------
+    text_bboxes : list
+        文字段落的 bbox
+    text_content : list
+        文字段落的内容
+    """
+
+    page_key = f"page_{page_num}"
+    result_dict = {page_key: {}}
+
+    blocks = page.get_text("dict")["blocks"]
+
+    para_num = 0
+    page_bboxes_para = []
+    for block in blocks:
+        if block["type"] == 0:  # 只处理文本块
+            bbox = block["bbox"]
+            text = " ".join([line["text"] for line in block["lines"]])
+
+            # 检查是否被图片或者表格的 bbox 覆盖
+            if any(
+                is_bbox_overlap(bbox, img_bbox)
+                for img_bbox in image_bboxes + table_bboxes
+            ):
+                continue
+
+            flag = 1
+            # 替换公式的 bbox
+            for eq_inline_bbox in equations_inline_bboxes:
+                if is_bbox_overlap(bbox, eq_inline_bbox):
+                    text = text.replace(eq_inline_bbox, "$equation_inline$")
+                    flag = 0
+
+            for eq_btw_bbox in equations_btw_bboxes:
+                if is_bbox_overlap(bbox, eq_btw_bbox):
+                    text = text.replace(eq_btw_bbox, "$equation_interline$")
+                    flag = 0
+
+            para_key = f"para_{para_num}"
+            para_num += 1
+            result_dict[page_key][para_key] = {"bbox": bbox, "text": text, "flag": flag}
+            page_bboxes_para.append(bbox)
+
+    result_dict[page_key]["bboxes_para"] = page_bboxes_para
+
+    return result_dict
+
+
+
+from pdf2text_recogFigure_20231107 import parse_images        # 获取figures的bbox
+from pdf2text_recogTable_20231107 import parse_tables         # 获取tables的bbox
+from pdf2text_recogEquation_20231107 import parse_equations    # 获取equations的bbox
+
+
 if __name__ == "__main__":
     import sys
 
     pdf_path = sys.argv[1]
     output_pdf_path = sys.argv[2]
     draw_blocks_lines_spans(pdf_path, output_pdf_path)
+    
+    pdf_doc = open_pdf(pdf_path)
+    
+    for page_id, page in enumerate(pdf_doc): # type: ignore
+        # 解析图片
+        image_bboxes  = parse_images(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
+        #exclude_bboxes.append(image_bboxes)
+
+        # 解析表格
+        table_bboxes  = parse_tables(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
+        #exclude_bboxes.append(table_bboxes)
+
+        # 解析公式
+        equations_inline_bboxes, equations_btw_bboxes = parse_equations(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
+        #exclude_bboxes.append(equations_bboxes)
+        
+        # 把图、表、公式都进行截图，保存到本地，返回图片路径作为内容
+        images_box_path_dict = get_images_by_bboxes(book_name, page_id, page, save_path, s3_profile, image_bboxes, table_bboxes, equations_bboxes)
+        
+        # 解析文字段落
+        text_bboxes, text_content = parse_paragraph(page, image_bboxes, table_bboxes, equations_inline_bboxes, equations_btw_bboxes,)
+        
