@@ -64,3 +64,18 @@ def get_and_set_idx_y(this_bbox, all_bboxes) -> int:
             max_idx_y = mymax(all_top_bboxes_idx)
             this_bbox[IDX_Y] = max_idx_y + 1
         return this_bbox[IDX_Y]
+
+
+def bbox_sort(all_bboxes:list):
+    """
+    排序
+    """
+    all_bboxes_idx_x = [get_and_set_idx_x(bbox, all_bboxes) for bbox in all_bboxes]
+    all_bboxes_idx_y = [get_and_set_idx_y(bbox, all_bboxes) for bbox in all_bboxes]
+    all_bboxes_idx = [(idx_x, idx_y) for idx_x, idx_y in zip(all_bboxes_idx_x, all_bboxes_idx_y)]
+    
+    all_bboxes_idx = [idx_x_y[0] * 100000 + idx_x_y[1] for idx_x_y in all_bboxes_idx] #变换成一个点，保证能够先X，X相同时按Y排序
+    all_bboxes_idx = list(zip(all_bboxes_idx, all_bboxes))
+    all_bboxes_idx.sort(key=lambda x: x[0])
+    sorted_bboxes = [bbox for idx, bbox in all_bboxes_idx]
+    return sorted_bboxes

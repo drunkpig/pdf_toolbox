@@ -113,11 +113,12 @@ def main(s3_pdf_path: str, s3_profile: str, save_path: str):
             images_box_path_dict = get_images_by_bboxes(book_name, page_id, page, save_path, s3_profile, image_bboxes, table_bboxes, equations_bboxes)
             
             # 解析文字段落
-            text_bboxes, text_content = parse_paragraph(page, image_bboxes, table_bboxes, equations_inline_bboxes, equations_btw_bboxes,)
+            text_bboxes, text_content = parse_paragraph(page, image_bboxes, table_bboxes, equations_inline_bboxes, equations_btw_bboxes)
             
 
             # 最后一步，根据bbox进行从左到右，从上到下的排序，之后拼接起来
             # 排序 TODO
+            
             
 
             # 拼接内容 TODO
