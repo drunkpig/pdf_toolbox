@@ -10,21 +10,10 @@ from loguru import logger
 
 from pdf2text_recogFigure_20231107 import parse_images        # 获取figures的bbox
 from pdf2text_recogTable_20231107 import parse_tables         # 获取tables的bbox
-from pdf2text_recogEquation_20231107 import parse_equations    # 获取equations的bbox
+from pdf2text_recogEquation_20231108 import parse_equations    # 获取equations的bbox
+from pdf2text_recogPara import parse_paragraph    
+from bbox_sort import bbox_sort, CONTENT_IDX, CONTENT_TYPE_IDX
 
-
-
-def parse_paragraph(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
-    pass
-
-
-def link2markdown(all_content: list):
-    """
-    拼接成markdown
-    :param all_content:
-    :return:
-    """
-    pass
 
 def cut_image(bbox: Tuple, page_num: int, page: fitz.Page, save_parent_path: str, s3_profile: str):
     """
@@ -54,7 +43,7 @@ def cut_image(bbox: Tuple, page_num: int, page: fitz.Page, save_parent_path: str
 
     return image_save_path
 
-def get_images_by_bboxes(book_name:str, page_num:int, page: fitz.Page, save_path:str, s3_profile:str, image_bboxes:list, table_bboxes:list, equation_bboxes:list) -> dict:
+def get_images_by_bboxes(book_name:str, page_num:int, page: fitz.Page, save_path:str, s3_profile:str, image_bboxes:list, table_bboxes:list) -> dict:
     """
     返回一个dict, key为bbox, 值是图片地址
     """
@@ -67,18 +56,46 @@ def get_images_by_bboxes(book_name:str, page_num:int, page: fitz.Page, save_path
     
     for bbox in image_bboxes:
         image_path = cut_image(bbox, page_num, page, image_save_path, s3_profile)
-        ret[bbox] = image_path
+        ret[bbox] = (image_path, "image") # 第二个元素是"image"，表示是图片
         
     for bbox in table_bboxes:
         image_path = cut_image(bbox, page_num, page, table_save_path, s3_profile)
-        ret[bbox] = image_path
-        
-    for bbox in equation_bboxes:
-        image_path = cut_image(bbox, page_num, page, equation_save_path, s3_profile)
-        ret[bbox] = image_path
+        ret[bbox] = (image_path, "table")
         
     return ret
         
+def reformat_bboxes(images_box_path_dict:list, text_bboxes:list, text_content:list):
+    """
+    把bbox重新组装成一个list，每个元素[x0, y0, x1, y1, block_content, idx_x, idx_y], 初始时候idx_x, idx_y都是None. 对于图片、公式来说，block_content是图片的地址， 对于段落来说，block_content是段落的内容
+    """
+    all_bboxes = []
+    for bbox, image_info in images_box_path_dict.items():
+        all_bboxes.append([bbox[0], bbox[1], bbox[2], bbox[3], image_info, None, None, 'image'])
+    
+    for bbox, content in zip(text_bboxes, text_content):
+        all_bboxes.append([bbox[0], bbox[1], bbox[2], bbox[3], content, None, None, 'text'])
+    
+    return all_bboxes
+        
+        
+def concat2markdown(all_bboxes:list):
+    """
+    对排序后的bboxes拼接内容
+    """
+    content_md = ""
+    for box in all_bboxes:
+        content_type = box[CONTENT_TYPE_IDX]
+        if content_type == 'image':
+            image_type = box[CONTENT_IDX][1]
+            image_path = box[CONTENT_IDX][0]
+            content_md += f"![{image_type}]({image_path})"
+        elif content_type == 'text': # 组装文本
+            content_md += box[CONTENT_IDX]
+        else:
+            raise Exception(f"ERROR: {content_type} is not supported!")
+        
+    return content_md
+    
 
 @click.command()
 @click.option('--s3-pdf-path', help='s3上pdf文件的路径')
@@ -89,8 +106,8 @@ def main(s3_pdf_path: str, s3_profile: str, save_path: str):
 
     """
     book_name = os.path.basename(s3_pdf_path).split(".")[0]
-    #exclude_bboxes = []  # 上一阶段产生的bbox，加入到这个里。例如图片产生的bbox,在下一阶段进行表格识别的时候就不能和这些bbox重叠。
     res_dir_path = None
+    exclude_bboxes = []
     
     try:
         pdf_bytes = read_pdf(s3_pdf_path, s3_profile)
@@ -99,29 +116,27 @@ def main(s3_pdf_path: str, s3_profile: str, save_path: str):
 
             # 解析图片
             image_bboxes  = parse_images(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
-            #exclude_bboxes.append(image_bboxes)
 
             # 解析表格
             table_bboxes  = parse_tables(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
-            #exclude_bboxes.append(table_bboxes)
 
             # 解析公式
-            equations_inline_bboxes, equations_btw_bboxes = parse_equations(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
-            #exclude_bboxes.append(equations_bboxes)
+            equations_inline_bboxes, equations_embd_bboxes = parse_equations(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
             
             # 把图、表、公式都进行截图，保存到本地，返回图片路径作为内容
-            images_box_path_dict = get_images_by_bboxes(book_name, page_id, page, save_path, s3_profile, image_bboxes, table_bboxes, equations_bboxes)
+            images_box_path_dict = get_images_by_bboxes(book_name, page_id, page, save_path, s3_profile, image_bboxes, table_bboxes) # 只要表格和图片的截图
             
             # 解析文字段落
-            text_bboxes, text_content = parse_paragraph(page, image_bboxes, table_bboxes, equations_inline_bboxes, equations_btw_bboxes)
+            text_bboxes, text_content = parse_paragraph(page, image_bboxes, table_bboxes, equations_inline_bboxes, equations_embd_bboxes)
             
 
-            # 最后一步，根据bbox进行从左到右，从上到下的排序，之后拼接起来
-            # 排序 TODO
+            # 最后一步，根据bbox进行从左到右，从上到下的排序，之后拼接起来, 排序
+            all_bboxes = reformat_bboxes(images_box_path_dict, text_bboxes, text_content) # 由于公式目前还没有，所以equation_bboxes是None，多数存在段落里，暂时不解析
+            # 返回的是一个数组，每个元素[x0, y0, x1, y1, block_content, idx_x, idx_y], 初始时候idx_x, idx_y都是None. 对于图片、公式来说，block_content是图片的地址， 对于段落来说，block_content是段落的内容
+            sorted_bboxes = bbox_sort(all_bboxes)
+            # 对排序后的bboxes拼接内容 TODO
+            markdown_text = concat2markdown(sorted_bboxes)
             
-            
-
-            # 拼接内容 TODO
 
     except Exception as e:
         print(f"ERROR: {s3_pdf_path}, {e}", file=sys.stderr)

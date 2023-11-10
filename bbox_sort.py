@@ -1,4 +1,4 @@
-# 定义这里的bbox是一个list [x0, y0, x1, y1, block_id, idx_x, idx_y], 初始时候idx_x, idx_y都是None
+# 定义这里的bbox是一个list [x0, y0, x1, y1, block_content, idx_x, idx_y, content_type], 初始时候idx_x, idx_y都是None
 # 其中x0, y0代表左上角坐标，x1, y1代表右下角坐标，坐标原点在左上角。
 
 IDX_X = 5
@@ -8,6 +8,9 @@ X0_IDX = 0
 Y0_IDX = 1
 X1_IDX = 2
 Y1_IDX = 3
+CONTENT_IDX = 4
+CONTENT_TYPE_IDX = 7
+
 
 def mymax(alist:list):
     """

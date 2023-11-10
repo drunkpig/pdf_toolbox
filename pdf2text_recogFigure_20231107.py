@@ -36,7 +36,7 @@ def calculate_overlapRatio_between_rect1_and_rect2(L1: float, U1: float, R1: flo
     return square_overlap / square_1, square_overlap / square_2
 
 def calculate_overlapRatio_between_line1_and_line2(L1: float, R1: float, L2: float, R2: float) -> (float, float):
-    # 计算两个rect，重叠面积各占2个rect面积的比例
+    # 计算两个line，重叠line各占2个line长度的比例
     if max(L1, L2) > min(R1, R2):
         return 0, 0
     if L1 == R1 or L2 == R2:
@@ -396,8 +396,8 @@ def parse_images(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_Doc
     for xf in xf_json['layout_dets']:
     # {0: 'title', 1: 'figure', 2: 'plain text', 3: 'header', 4: 'page number', 5: 'footnote', 6: 'footer', 7: 'table', 8: 'table caption', 9: 'figure caption', 10: 'equation', 11: 'full column', 12: 'sub column'}
         L = xf['poly'][0] / LR_scaleRatio
-        U = xf['poly'][1] / LR_scaleRatio
-        R = xf['poly'][2] / UD_scaleRatio
+        U = xf['poly'][1] / UD_scaleRatio
+        R = xf['poly'][2] / LR_scaleRatio
         D = xf['poly'][5] / UD_scaleRatio
         L += pageL          # 有的页面，artBox偏移了。不在（0,0）
         R += pageL
@@ -435,7 +435,7 @@ def parse_images(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_Doc
     ## 比对svgs
     for i, b1 in enumerate(figure_bbox_from_DocXChain):
         L1, U1, R1, D1 = b1
-        for b2 in svg_final_bboxs:
+        for b2 in svg_final_bboxs_2:
             L2, U2, R2, D2 = b2
             # 相同
             if check_rect1_sameWith_rect2(L1, U1, R1, D1, L2, U2, R2, D2) == True:
@@ -468,7 +468,9 @@ def parse_images(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_Doc
             figure_only_from_DocXChain_visited.append(False)
             figure_only_ID += 1
     
-
+    img_bboxs.sort(key = lambda LURD: (LURD[1], LURD[0]))
+    svg_final_bboxs_2.sort(key = lambda LURD: (LURD[1], LURD[0]))
+    figure_only_from_DocXChain_bboxs.sort(key = lambda LURD: (LURD[1], LURD[0]))
     curPage_all_fig_bboxs = img_bboxs + svg_final_bboxs + figure_only_from_DocXChain_bboxs
     return curPage_all_fig_bboxs
 
