@@ -287,7 +287,7 @@ def draw_blocks_lines_spans(pdf_path, output_pdf_path):
     -------
     None.
     """
-    block_color = (1, 0, 1)  # 蓝色
+    block_color = (1, 0, 1)  # 粉色
     para_color = (0, 1, 1)  # 青色
 
     y_tolerance = 2.0  # 允许y坐标有2个单位的偏差
@@ -353,7 +353,7 @@ def is_bbox_overlap(bbox1, bbox2):
 
     if x0_1 > x1_2 or x0_2 > x1_1:
         return False
-    if y0_1 < y1_2 or y0_2 < y1_1:
+    if y0_1 > y1_2 or y0_2 > y1_1:
         return False
 
     return True
@@ -405,30 +405,34 @@ def parse_paragraph(
                 span["text"] for line in block["lines"] for span in line["spans"]
             )
 
+
+            is_overlap = False
+            
             # 检查是否被图片或者表格的 bbox 覆盖
             if any(
                 is_bbox_overlap(bbox, img_bbox)
                 for img_bbox in image_bboxes + table_bboxes
             ):
+                is_overlap = True
                 continue
 
-            flag = 1
+            flag = 0 # 0: Pymupdf 默认识别的文字段落，1: 经过自编写段落识别的文字段落
 
             if len(equations_inline_bboxes) > 0:
                 # 替换公式的 bbox
                 for eq_inline_bbox in equations_inline_bboxes:
                     if is_bbox_overlap(bbox, eq_inline_bbox):
-                        text = text.replace(eq_inline_bbox, "$equation_inline$")
-                        flag = 0
+                        text = "$equation_inline$"
+                        is_overlap = True
 
             for eq_btw_bbox in equations_interline_bboxes:
                 if is_bbox_overlap(bbox, eq_btw_bbox):
-                    text = text.replace(eq_btw_bbox, "$equation_interline$")
-                    flag = 0
+                    text = "$equation_interline$"
+                    is_overlap = True
 
             para_key = f"para_{para_num}"
             para_num += 1
-            result_dict[page_key][para_key] = {"bbox": bbox, "text": text, "flag": flag}
+            result_dict[page_key][para_key] = {"bbox": bbox, "text": text, "flag": flag, "is_overlap": is_overlap}
             page_bboxes_para.append(bbox)
 
     result_dict[page_key]["bboxes_para"] = page_bboxes_para
@@ -436,7 +440,7 @@ def parse_paragraph(
     return result_dict
 
 
-def get_test_data(file_path, print_data=False):
+def get_test_data(file_path, not_print_data=True):
     """
     从文件中获取测试数据
     """
@@ -454,7 +458,7 @@ def get_test_data(file_path, print_data=False):
     pageID_tableBboxs = data["pageID_tableBboxs"]
     pageID_equationBboxs = data["pageID_equationBboxs"]
 
-    if not print_data:
+    if not not_print_data:
         for pageID, (imageBboxs, tableBboxs, equationBboxs) in enumerate(
             zip(pageID_imageBboxs, pageID_tableBboxs, pageID_equationBboxs)
         ):
@@ -473,25 +477,43 @@ from pdf2text_recogEquation_20231108 import parse_equations  # 获取equations�
 
 
 if __name__ == "__main__":
-    pdf_path = sys.argv[1]
-    output_pdf_path = sys.argv[2]
     
+    if os.name == "nt":
+        DEFAULT_PDF_PATH = "test\\assets\\paper\\paper.pdf"
+    else:
+        DEFAULT_PDF_PATH = "test/assets/paper/paper.pdf"
+    
+    if len(sys.argv) > 1:
+        pdf_path = sys.argv[1]
+    else:
+        pdf_path = DEFAULT_PDF_PATH
+    
+    try:
+        output_pdf_path = sys.argv[2]
+    except IndexError:
+        output_pdf_path = None
+        
+    if output_pdf_path is None:
+        output_pdf_path = pdf_path.split(".")[0] + "_recogPara.pdf"
+
     if os.path.exists(output_pdf_path):
+        import stat
+        os.chmod(output_pdf_path, stat.S_IWRITE)
         os.remove(output_pdf_path)
 
     pdf_doc = open_pdf(pdf_path)
 
-    test_json_file = "test\\assets\\paper\\images_tables_equations.json"
+    if os.name == "nt":
+        test_json_file = "test\\assets\\paper\\images_tables_equations.json"
+    else:
+        test_json_file = "test/assets/paper/images_tables_equations.json"
+
     (
         pageID_imageBboxs,
         pageID_tableBboxs,
         pageID_interline_equationBboxs,
-    ) = get_test_data(test_json_file, print_data=False)
+    ) = get_test_data(test_json_file, not_print_data=True)
     pageID_inline_equationBboxs = []
-
-    # print(f"pageID_imageBboxs: {pageID_imageBboxs}")
-    # print(f"pageID_tableBboxs: {pageID_tableBboxs}")
-    # print(f"pageID_equationBboxs: {pageID_interline_equationBboxs}")
 
     pdf_dic = {}
 
@@ -508,8 +530,13 @@ if __name__ == "__main__":
         page_key = f"page_{page_id}"
         pdf_dic[page_key] = result_dict[page_key]
 
-    # print the pdf_dic in a human-readable format
-    print(json.dumps(pdf_dic, indent=4, ensure_ascii=False))
+    if os.name == "nt":
+        output_json_file = "test\\assets\\paper\\pdf_dic.json"
+    else:
+        output_json_file = "test/assets/paper/pdf_dic.json"
+
+    with open(output_json_file, "w", encoding="utf-8") as f:
+        json.dump(pdf_dic, f, ensure_ascii=False, indent=4)
 
     for page_id, page in enumerate(pdf_doc):
         page_key = f"page_{page_id}"
@@ -519,19 +546,29 @@ if __name__ == "__main__":
             para_bbox = pdf_dic[page_key][para_key]["bbox"]
             para_text = pdf_dic[page_key][para_key]["text"]
             para_flag = pdf_dic[page_key][para_key]["flag"]
+            is_overlap = pdf_dic[page_key][para_key]["is_overlap"]
 
-            if para_flag == 1:
+            if is_overlap: # 被图片或者表格、公式的 bbox 覆盖， 红色
                 para_rect = fitz.Rect(para_bbox)
+                print(para_text)
                 para_annot = page.add_rect_annot(para_rect)
-                para_annot.set_colors(stroke=(0, 1, 1))
+                para_annot.set_colors(stroke=(1, 0, 0)) # 红色
                 para_annot.set_border(width=2)
 
                 para_annot.update()
-            else:
+
+            if para_flag == 1: # 经过段落识别的文字段落，绿色
                 para_rect = fitz.Rect(para_bbox)
                 para_annot = page.add_rect_annot(para_rect)
-                para_annot.set_colors(stroke=(1, 0, 1))
-                para_annot.set_border(width=2)
+                para_annot.set_colors(stroke=(0, 1, 0)) # 绿色
+                para_annot.set_border(width=0.5)
+
+                para_annot.update()
+            else: # Pymupdf 默认识别的文字段落，蓝色
+                para_rect = fitz.Rect(para_bbox)
+                para_annot = page.add_rect_annot(para_rect)
+                para_annot.set_colors(stroke=(0, 0, 1))
+                para_annot.set_border(width=1)
 
                 para_annot.update()
 
