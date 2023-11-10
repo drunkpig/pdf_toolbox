@@ -81,5 +81,7 @@ def parse_equations(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_
             equationIsolated_ID += 1
         except:
             pass
-    
+            
+    equationEmbedding_from_DocXChain_bboxs.sort(key = lambda LURD: (LURD[1], LURD[0]))
+    equationIsolated_from_DocXChain_bboxs.sort(key = lambda LURD: (LURD[1], LURD[0])) 
     return equationEmbedding_from_DocXChain_bboxs, equationIsolated_from_DocXChain_bboxs
