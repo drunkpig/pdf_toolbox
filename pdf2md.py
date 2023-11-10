@@ -14,10 +14,6 @@ from pdf2text_recogEquation_20231108 import parse_equations    # 获取equations
 from pdf2text_recogPara import parse_paragraph                 # 获取paragraph的bbox
 
 
-def parse_paragraph(page: fitz.Page, exclude_bboxes: list[Tuple] = None) -> (list[Tuple], list):
-    pass
-
-
 def link2markdown(all_content: list):
     """
     拼接成markdown
