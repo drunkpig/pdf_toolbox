@@ -90,6 +90,7 @@ def concat2markdown(all_bboxes:list):
             image_path = box[CONTENT_IDX][0]
             content_md += f"![{image_type}]({image_path})"
         elif content_type == 'text': # 组装文本
+            
             content_md += box[CONTENT_IDX]
         else:
             raise Exception(f"ERROR: {content_type} is not supported!")
