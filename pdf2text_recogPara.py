@@ -80,7 +80,7 @@ def collect_bbox_values(
     line_heights : list
         line heights of the bbox
     """
-    for i, line in enumerate(combined_lines[1:-1], 1):  # 跳过首行和末行
+    for i, line in enumerate(combined_lines[1:-1], 1):  # Skip first and last lines
         bbox = line["bbox"]
         text = line["text"]
 
@@ -93,7 +93,7 @@ def collect_bbox_values(
             char_width = (bbox[2] - bbox[0]) / num_chars
             char_widths.append(char_width)
 
-        if i > 1:  # 从第二行开始计算行高
+        if i > 1:  # Calculate row height from the second row
             prev_bbox = combined_lines[i - 1]["bbox"]
             line_height = max(
                 (bbox[1] - prev_bbox[1]) / 2, (prev_bbox[3] - bbox[3]) / 2
@@ -152,7 +152,7 @@ def combine_lines(block, y_tolerance):
         combined lines
 
     """
-    combined_lines = []  # 用于存储合并后的lines
+    combined_lines = []  # Used to store merged lines
     current_line = None
     for line in block["lines"]:
         line_bbox = line["bbox"]
@@ -340,6 +340,16 @@ def process_block(
         + header_bboxes
         + footer_bboxes
     )
+
+    for eq_bbox in equations_inline_bboxes + equations_interline_bboxes:
+        if is_bbox_overlap(bbox, eq_bbox):
+            # Replace text with placeholder if overlap found
+            text = (
+                "$equations_inline_bboxes$"
+                if eq_bbox in equations_inline_bboxes
+                else "$equations_interline_bboxes$"
+            )
+            break
 
     # If there's an overlap, return the processed block early
     if is_overlap:
@@ -573,12 +583,12 @@ def parse_blocks_per_page(
 
 
 def draw_block_border(page, block_color, block):
-    if block["type"] == 0:  # 只处理文本块
+    if block["type"] == 0:  # Dealing with text blocks only
         block_bbox = block["bbox"]
         block_rect = fitz.Rect(block_bbox)
         block_annot = page.add_rect_annot(block_rect)
         block_annot.set_colors(stroke=block_color)
-        block_annot.set_border(width=2)  # 增加block边框宽度
+        block_annot.set_border(width=2)
         block_annot.update()
 
 
@@ -595,7 +605,7 @@ def draw_paragraph_border(page, para_color, start_of_para, end_of_para, combined
     para_rect = fitz.Rect(min_x, min_y, max_x, max_y)
     para_annot = page.add_rect_annot(para_rect)
     para_annot.set_colors(stroke=para_color)
-    para_annot.set_border(width=2)  # 青色粗线
+    para_annot.set_border(width=2)
     para_annot.update()
 
 
@@ -615,10 +625,10 @@ def draw_blocks_lines_spans(pdf_path, output_pdf_path):
     -------
     None.
     """
-    block_color = (1, 0, 1)  # 粉色
-    para_color = (0, 1, 1)  # 青色
+    block_color = (1, 0, 1)
+    para_color = (0, 1, 1)
 
-    y_tolerance = 2.0  # 允许y坐标有2个单位的偏差
+    y_tolerance = 2.0  # Allow 2 units of deviation in the y-coordinate
 
     pdf_document = open_pdf(pdf_path)
     if not pdf_document:
@@ -639,7 +649,9 @@ def draw_blocks_lines_spans(pdf_path, output_pdf_path):
 
             start_of_para = None
             in_paragraph = False
-            paragraphs = []  # 用于存储段落的起始和结束行索引
+            paragraphs = (
+                []
+            )  # Used to store indexes of starting and ending line of paragraphs
 
             for line_index, line in enumerate(combined_lines):
                 line_bbox = line["bbox"]
@@ -668,8 +680,8 @@ def draw_blocks_lines_spans(pdf_path, output_pdf_path):
                             page, para_color, start_of_para, end_of_para, combined_lines
                         )
                         paragraphs.append((start_of_para, end_of_para))
-                        start_of_para = None  # 重置段落开始标记
-                        in_paragraph = False  # 重置段落状态
+                        start_of_para = None  # Reset paragraph start markers
+                        in_paragraph = False  # Reset paragraph status
 
     pdf_document.save(output_pdf_path)
     pdf_document.close()
@@ -706,13 +718,16 @@ def get_test_data(file_path, not_print_data=True):
     return pageID_imageBboxs, pageID_tableBboxs, pageID_equationBboxs
 
 
-from pdf2text_recogFigure_20231107 import parse_images  # 获取figures的bbox
-from pdf2text_recogTable_20231107 import parse_tables  # 获取tables的bbox
-from pdf2text_recogEquation_20231108 import parse_equations  # 获取equations的bbox
+from pdf2text_recogFigure_20231107 import parse_images  # Get the figures bboxes
+from pdf2text_recogTable_20231107 import parse_tables  # Get the tables bboxes
+from pdf2text_recogEquation_20231108 import parse_equations  # Get the equations bboxes
 
 
+# Run this script to test the function:
+#   command:
 
-# run this script to test the function, command: python pdf2text_recogPara.py [pdf_path] [output_pdf_path]
+#       python pdf2text_recogPara.py [pdf_path] [output_pdf_path]
+#
 # pdf_path: the path of the pdf file
 # output_pdf_path: the path of the output pdf file
 
@@ -796,10 +811,23 @@ if __name__ == "__main__":
                 is_block_segmented = block["is_segmented"]
                 is_block_overlap = block["is_overlap"]
 
+                """
+                Color code:
+                    Red: (1, 0, 0)
+                    Green: (0, 1, 0)
+                    Blue: (0, 0, 1)
+                    Yellow: (1, 1, 0) - mix of red and green
+                    Cyan: (0, 1, 1) - mix of green and blue
+                    Magenta: (1, 0, 1) - mix of red and blue
+                    White: (1, 1, 1) - red, green and blue full intensity
+                    Black: (0, 0, 0) - no color component whatsoever
+                    Gray: (0.5, 0.5, 0.5) - equal and medium intensity of red, green and blue color components
+                    Orange: (1, 0.65, 0) - maximum intensity of red, medium intensity of green, no blue component
+                """
                 if not is_block_segmented:
                     # Draw rectangle for the entire block
-                    rect_color = (1, 0, 0) if is_block_overlap else (0, 0, 1)
-                    rect_width = 2 if is_block_overlap else 1
+                    rect_color = (0, 1, 1) if is_block_overlap else (0, 0, 1) # if is_block_overlap is True, then the color is Cyan, else the color is blue
+                    rect_width = 2 if is_block_overlap else 1 # if is_block_overlap is True, then the width is 2, else the width is 1
                     block_rect = fitz.Rect(block["bbox"])
                     block_annot = page.add_rect_annot(block_rect)
                     block_annot.set_colors(stroke=rect_color)
@@ -812,10 +840,10 @@ if __name__ == "__main__":
                         para_annot = page.add_rect_annot(para_rect)
                         # Green for matched paragraphs, yellow for unmatched
                         stroke_color = (
-                            (0, 1, 0) if para["is_matched"] == 1 else (1, 1, 0)
+                            (0, 1, 0) if para["is_matched"] == 1 else (1, 0, 0) # if para["is_matched"] is True, then the color is Green, else the color is Red
                         )
                         para_annot.set_colors(stroke=stroke_color)
-                        para_annot.set_border(width=0.5)
+                        para_annot.set_border(width=0.5) # if border width of para is always 0.5
                         para_annot.update()
 
     pdf_doc.save(output_pdf_path)

@@ -772,7 +772,7 @@
                 527.1583251953125,
                 525.7728881835938
             ],
-            "text": "� = � �  + � �  + � �  + � �                                                           (1) ",
+            "text": "$equations_interline_bboxes$",
             "is_segmented": 0,
             "is_overlap": true,
             "paras": {},
@@ -816,7 +816,7 @@
                 527.1583862304688,
                 610.4263916015625
             ],
-            "text": "� �  =  � � ��� � �  ,  � = 1 ÷ 4                                                                   (2) ",
+            "text": "$equations_interline_bboxes$",
             "is_segmented": 0,
             "is_overlap": true,
             "paras": {},
