@@ -179,6 +179,68 @@ def combine_lines(block, y_tolerance):
 
     return combined_lines
 
+# TODO
+def is_footer_line(line_bbox, footer_bboxes, avg_char_height):
+    """
+    This function checks if the line is a footer line.
+
+    Parameters
+    ----------
+    line_bbox : list
+        line bbox
+    footer_bboxes : list
+        footer bboxes
+    avg_char_height : float
+        average char height
+
+    Returns
+    -------
+    bool
+        True if the line is a footer line, False otherwise.
+
+    """
+    x0, y0, x1, y1 = line_bbox
+    for footer_bbox in footer_bboxes:
+        if (
+            abs(y0 - footer_bbox[1]) < avg_char_height
+            and abs(y1 - footer_bbox[3]) < avg_char_height
+            and abs(x0 - footer_bbox[0]) < avg_char_height
+            and abs(x1 - footer_bbox[2]) < avg_char_height
+        ):
+            return True
+    return False
+
+
+# TODO
+def is_header_line(line_bbox, header_bboxes, avg_char_height):
+    """
+    This function checks if the line is a header line.
+
+    Parameters
+    ----------
+    line_bbox : list
+        line bbox
+    header_bboxes : list
+        header bboxes
+    avg_char_height : float
+        average char height
+
+    Returns
+    -------
+    bool
+        True if the line is a header line, False otherwise.
+
+    """
+    x0, y0, x1, y1 = line_bbox
+    for header_bbox in header_bboxes:
+        if (
+            abs(y0 - header_bbox[1]) < avg_char_height
+            and abs(y1 - header_bbox[3]) < avg_char_height
+            and abs(x0 - header_bbox[0]) < avg_char_height
+            and abs(x1 - header_bbox[2]) < avg_char_height
+        ):
+            return True
+    return False
 
 def is_regular_line(
     line_bbox, prev_line_bbox, next_line_bbox, avg_char_height, X0, X1, avg_char_width
