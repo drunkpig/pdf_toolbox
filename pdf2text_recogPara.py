@@ -268,8 +268,31 @@ def process_block(raw_block, y_tolerance):
 
     Returns
     -------
-    processed_block : dict
-        The processed block.
+    processed_paras : list
+        The processed result paragraphs.
+
+        One element in the list is a dictionary, which has the following structure:
+        {
+            "bbox": block_bbox,
+            "text": block_text,
+            "is_parased": is_parased, # 0: Pymupdf 默认识别的文字段落，1: 经过自编写段落识别的文字段落
+            "is_overlap": is_overlap, # 是否被图片或者表格、公式的 bbox 覆盖
+             "paras": {
+                "para_0": {
+                    "bbox": para_bbox,
+                    "text": para_text,
+                },
+                "para_1": {
+                    "bbox": para_bbox,
+                    "text": para_text,
+                },
+                "para_2": {
+                    "bbox": para_bbox,
+                    "text": para_text,
+                },
+            },
+            "bboxes_para": [para_bbox_0, para_bbox_1, para_bbox_2],
+        }
     """
     y_tolerance = 2.0  # 允许y坐标有2个单位的偏差
 
@@ -309,15 +332,30 @@ def process_block(raw_block, y_tolerance):
                 start_of_para = None  # 重置段落开始标记
                 in_paragraph = False  # 重置段落状态
 
-    processed_block = []
-    for start_of_para, end_of_para in paragraphs:
+    processed_paras = []
+
+    for para_index, (start_of_para, end_of_para) in enumerate(paragraphs):
         para_bbox = combined_lines[start_of_para]["bbox"]
         para_text = " ".join(
             line["text"] for line in combined_lines[start_of_para : end_of_para + 1]
         )
-        processed_block.append({"bbox": para_bbox, "text": para_text})
-        
-    return processed_block
+
+        processed_paras.append({"bbox": para_bbox, "text": para_text})
+
+
+    raw_block["bbox"] = combined_lines[0]["bbox"]
+    raw_block["text"] = " ".join(line["text"] for line in combined_lines)
+
+    raw_block["is_parased"] = 0
+    if len(processed_paras) > 0:
+        raw_block["is_parased"] = 1
+
+    raw_block["is_overlap"] = False
+    raw_block["paras"] = processed_paras
+    raw_block["bboxes_para"] = [para["bbox"] for para in processed_paras]
+
+    return processed_paras
+
 
 def parse_paragraph(
     page,
@@ -359,6 +397,9 @@ def parse_paragraph(
     para_num = 0
     page_bboxes_para = []
 
+    # print(f"raw_blocks: {raw_blocks}")
+    print(f">>>>>>>>>>>>>>>> raw_blocks:")
+
     for raw_block in raw_blocks:
         if raw_block["type"] == 0:  # 只处理文本块
             bbox = raw_block["bbox"]
@@ -366,15 +407,50 @@ def parse_paragraph(
                 span["text"] for line in raw_block["lines"] for span in line["spans"]
             )
 
-            flag = 0  # 0: Pymupdf 默认识别的文字段落，1: 经过自编写段落识别的文字段落
+            is_parased = 0  # 0: Pymupdf 默认识别的文字段落，1: 经过自编写段落识别的文字段落
 
             processed_block = process_block(raw_block, y_tolerance=2.0)
 
-            if len(processed_block) > 1:
-                flag = 1
-                text = "$para$".join(block["text"] for block in processed_block)
-                
-            
+            print(f"processed_block: {processed_block}")
+            # make a dictionary to store the paragraph in processed_block
+            # structure:
+            # {
+            #     "page_0": {
+            #         "block_0": {
+            #             "bbox": block_bbox, # pymupdf 切分出来的文本块的 bbox
+            #             "text": block_text, # pymupdf 切分出来的文本块的内容
+            #             "is_parased": is_parased, # 0: Pymupdf 默认识别的文字段落，1: 经过自编写段落识别的文字段落
+            #             "is_overlap": is_overlap, # 是否被图片或者表格、公式的 bbox 覆盖
+            #              "paras": {
+            #                 "para_0": {
+            #                     "bbox": para_bbox,
+            #                     "text": para_text,
+            #                     "is_matched": is_matched, # 是否匹配是依据切分段落的代码得到的
+            #                 },
+            #                 "para_1": {
+            #                     "bbox": para_bbox,
+            #                     "text": para_text,
+            #                     "is_matched": is_matched,
+            #                 },
+            #                 "para_2": {
+            #                     "bbox": para_bbox,
+            #                     "text": para_text,
+            #                     "is_matched": is_matched,
+            #                 },
+            #             },
+            #             "bboxes_para": [para_bbox_0, para_bbox_1, para_bbox_2],
+            #         },
+            #         "block_1": {
+            #             "bbox": block_bbox,
+            #             "text": block_text,
+            #             "is_parased": is_parased,
+            #             "is_overlap": is_overlap,
+            #              "paras": {},
+            #             "bboxes_para": [],
+            #         },
+            #     }
+            # }
+
             # 开始检查是否被图片、表格、公式的 bbox 覆盖
             is_overlap = False
 
@@ -398,12 +474,12 @@ def parse_paragraph(
                     text = "$equation_interline$"
                     is_overlap = True
 
-            para_key = f"para_{para_num}"
+            para_key = f"block_{para_num}"
             para_num += 1
             result_dict[page_key][para_key] = {
                 "bbox": bbox,
                 "text": text,
-                "flag": flag,
+                "is_parased": is_parased,
                 "is_overlap": is_overlap,
             }
             page_bboxes_para.append(bbox)
@@ -615,6 +691,8 @@ if __name__ == "__main__":
     with open(output_json_file, "w", encoding="utf-8") as f:
         json.dump(pdf_dic, f, ensure_ascii=False, indent=4)
 
+
+    """
     # draw the bboxes of paragraph
     for page_id, page in enumerate(pdf_doc):
         page_key = f"page_{page_id}"
@@ -623,7 +701,7 @@ if __name__ == "__main__":
             para_key = f"para_{para_id}"
             para_bbox = pdf_dic[page_key][para_key]["bbox"]
             para_text = pdf_dic[page_key][para_key]["text"]
-            para_flag = pdf_dic[page_key][para_key]["flag"]
+            is_parased = pdf_dic[page_key][para_key]["is_parased"]
             is_overlap = pdf_dic[page_key][para_key]["is_overlap"]
 
             if is_overlap:  # 被图片或者表格、公式的 bbox 覆盖，红色
@@ -635,7 +713,7 @@ if __name__ == "__main__":
 
                 para_annot.update()
 
-            if para_flag == 1:  # 经过段落识别的文字段落，绿色
+            if is_parased == 1:  # 经过段落识别的文字段落，绿色
                 para_rect = fitz.Rect(para_bbox)
                 para_annot = page.add_rect_annot(para_rect)
                 para_annot.set_colors(stroke=(0, 1, 0))  # 绿色
@@ -652,3 +730,4 @@ if __name__ == "__main__":
 
     pdf_doc.save(output_pdf_path)
     pdf_doc.close()
+    """
