@@ -826,8 +826,12 @@ if __name__ == "__main__":
                 """
                 if not is_block_segmented:
                     # Draw rectangle for the entire block
-                    rect_color = (0, 1, 1) if is_block_overlap else (0, 0, 1) # if is_block_overlap is True, then the color is Cyan, else the color is blue
-                    rect_width = 2 if is_block_overlap else 1 # if is_block_overlap is True, then the width is 2, else the width is 1
+                    rect_color = (
+                        (0, 1, 1) if is_block_overlap else (0, 0, 1)
+                    )  # if is_block_overlap is True, then the color is Cyan, else the color is blue
+                    rect_width = (
+                        2 if is_block_overlap else 1
+                    )  # if is_block_overlap is True, then the width is 2, else the width is 1
                     block_rect = fitz.Rect(block["bbox"])
                     block_annot = page.add_rect_annot(block_rect)
                     block_annot.set_colors(stroke=rect_color)
@@ -840,10 +844,18 @@ if __name__ == "__main__":
                         para_annot = page.add_rect_annot(para_rect)
                         # Green for matched paragraphs, yellow for unmatched
                         stroke_color = (
-                            (0, 1, 0) if para["is_matched"] == 1 else (1, 0, 0) # if para["is_matched"] is True, then the color is Green, else the color is Red
+                            (0, 1, 0)
+                            if para["is_matched"] == 1
+                            else (
+                                1,
+                                0,
+                                0,
+                            )  # if para["is_matched"] is True, then the color is Green, else the color is Red
                         )
                         para_annot.set_colors(stroke=stroke_color)
-                        para_annot.set_border(width=0.5) # if border width of para is always 0.5
+                        para_annot.set_border(
+                            width=0.5
+                        )  # if border width of para is always 0.5
                         para_annot.update()
 
     pdf_doc.save(output_pdf_path)
