@@ -7,3 +7,5 @@ classfied/
 jsonl/
 *.txt
 *.bak
+tmp/
+temp/

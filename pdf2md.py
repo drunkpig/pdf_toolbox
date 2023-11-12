@@ -39,6 +39,10 @@ def cut_image(bbox: Tuple, page_num: int, page: fitz.Page, save_parent_path: str
         cli.upload_fileobj(pix.tobytes(output='jpeg', jpg_quality=95), bucket_name, bucket_key)
     else:
         # 保存图片到本地
+        # 先检查一下image_save_path的父目录是否存在，如果不存在，就创建
+        parent_dir = os.path.dirname(image_save_path)
+        if not os.path.exists(parent_dir):
+            os.makedirs(parent_dir)
         pix.save(image_save_path, jpg_quality=95)
 
     return image_save_path
@@ -93,6 +97,7 @@ def concat2markdown(all_bboxes:list):
             image_type = box[CONTENT_IDX][1]
             image_path = box[CONTENT_IDX][0]
             content_md += f"![{image_type}]({image_path})"
+            content_md += "\n\n"
         elif content_type == 'text': # 组装文本
             paras = box[CONTENT_IDX]['paras']
             text_content = ""
@@ -146,7 +151,7 @@ def main(s3_pdf_path: str, s3_pdf_profile: str, pdf_model_path:str, pdf_model_pr
             footer_bboxes =[]
             header_bboxes = []
             exclude_bboxes = image_bboxes + table_bboxes
-            paras_dict = parse_blocks_per_page(page, page_id, image_bboxes, table_bboxes, equations_inline_bboxes, equations_interline_bboxes,  exclude_bboxes, footer_bboxes, header_bboxes)
+            paras_dict = parse_blocks_per_page(page, page_id, image_bboxes, table_bboxes, equations_inline_bboxes, equations_interline_bboxes, footer_bboxes, header_bboxes)
             
 
             # 最后一步，根据bbox进行从左到右，从上到下的排序，之后拼接起来, 排序
@@ -155,7 +160,7 @@ def main(s3_pdf_path: str, s3_pdf_profile: str, pdf_model_path:str, pdf_model_pr
             # 返回的是一个数组，每个元素[x0, y0, x1, y1, block_content, idx_x, idx_y], 初始时候idx_x, idx_y都是None. 对于图片、公式来说，block_content是图片的地址， 对于段落来说，block_content是段落的内容
             sorted_bboxes = bbox_sort(all_bboxes)
             markdown_text = concat2markdown(sorted_bboxes)
-            
+            print(markdown_text)
             
 
     except Exception as e:

@@ -5,12 +5,12 @@ import fitz             # pyMuPDF库
 import json             # json
 
 
-def parse_equations(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_DocXchain_dir: str, exclude_bboxes):
+def parse_equations(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_DocXchain: str, exclude_bboxes):
     """
     :param page_ID: int类型，当前page在当前pdf文档中是第page_D页。
     :param page :fitz读取的当前页的内容
     :param res_dir_path: str类型，是每一个pdf文档，在当前.py文件的目录下生成一个与pdf文档同名的文件夹，res_dir_path就是文件夹的dir
-    :param json_from_DocXchain_dir:str类型，把pdf文档送入DocXChain模型中后，提取bbox，结果保存到pdf文档同名文件夹下的 page_ID.json文件中了。json_from_DocXchain_dir就是该文件夹的dir
+    :param json_from_DocXchain:str类型，把pdf文档送入DocXChain模型中后，提取bbox，结果保存到pdf文档同名文件夹下的 page_ID.json文件中了
     """
     page_artbox = page.artbox
     pageL, pageU, pageR, pageD = page_artbox[0], page_artbox[1], page_artbox[2], page_artbox[3]
@@ -20,9 +20,7 @@ def parse_equations(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_
     equationEmbedding_from_DocXChain_bboxs = []
     equationIsolated_from_DocXChain_bboxs = []
     
-    
-    with open(json_from_DocXchain_dir + f'/{page_ID}.json', 'r') as f:
-        xf_json = json.load(f)
+    xf_json = json_from_DocXchain
     width_from_json = xf_json['page_info']['width']
     height_from_json = xf_json['page_info']['height']
     LR_scaleRatio = width_from_json / (pageR - pageL)
