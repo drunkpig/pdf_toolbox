@@ -135,8 +135,8 @@ def main(s3_pdf_path: str, s3_profile: str, save_path: str):
             all_bboxes = reformat_bboxes(images_box_path_dict, text_bboxes, text_content) # 由于公式目前还没有，所以equation_bboxes是None，多数存在段落里，暂时不解析
             # 返回的是一个数组，每个元素[x0, y0, x1, y1, block_content, idx_x, idx_y], 初始时候idx_x, idx_y都是None. 对于图片、公式来说，block_content是图片的地址， 对于段落来说，block_content是段落的内容
             sorted_bboxes = bbox_sort(all_bboxes)
-            # 对排序后的bboxes拼接内容 TODO
             markdown_text = concat2markdown(sorted_bboxes)
+            
             
 
     except Exception as e:
