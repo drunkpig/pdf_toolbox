@@ -64,7 +64,7 @@ def get_images_by_bboxes(book_name:str, page_num:int, page: fitz.Page, save_path
         
     return ret
         
-def reformat_bboxes(images_box_path_dict:list, text_bboxes:list, text_content:list):
+def reformat_bboxes(images_box_path_dict:list, paras_dict:dict):
     """
     把bbox重新组装成一个list，每个元素[x0, y0, x1, y1, block_content, idx_x, idx_y], 初始时候idx_x, idx_y都是None. 对于图片、公式来说，block_content是图片的地址， 对于段落来说，block_content是段落的内容
     """
@@ -72,7 +72,11 @@ def reformat_bboxes(images_box_path_dict:list, text_bboxes:list, text_content:li
     for bbox, image_info in images_box_path_dict.items():
         all_bboxes.append([bbox[0], bbox[1], bbox[2], bbox[3], image_info, None, None, 'image'])
     
-    for bbox, content in zip(text_bboxes, text_content):
+    paras_dict = paras_dict[f"page_{paras_dict['page_id']}"]
+    
+    for block_id, kvpair in paras_dict.items():
+        bbox = kvpair['bbox']
+        content = kvpair
         all_bboxes.append([bbox[0], bbox[1], bbox[2], bbox[3], content, None, None, 'text'])
     
     return all_bboxes
@@ -90,8 +94,13 @@ def concat2markdown(all_bboxes:list):
             image_path = box[CONTENT_IDX][0]
             content_md += f"![{image_type}]({image_path})"
         elif content_type == 'text': # 组装文本
+            paras = box[CONTENT_IDX]['paras']
+            text_content = ""
+            for para_id, para in paras.items():# 拼装内部的段落文本
+                text_content += para['text']
+                text_content += "\n\n"
             
-            content_md += box[CONTENT_IDX]
+            content_md += text_content
         else:
             raise Exception(f"ERROR: {content_type} is not supported!")
         
@@ -122,19 +131,22 @@ def main(s3_pdf_path: str, s3_profile: str, save_path: str):
             table_bboxes  = parse_tables(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
 
             # 解析公式
-            equations_inline_bboxes, equations_embd_bboxes = parse_equations(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
+            equations_interline_bboxes, equations_inline_bboxes = parse_equations(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
             
             # 把图、表、公式都进行截图，保存到本地，返回图片路径作为内容
             images_box_path_dict = get_images_by_bboxes(book_name, page_id, page, save_path, s3_profile, image_bboxes, table_bboxes) # 只要表格和图片的截图
             
             # 解析文字段落
+            
             footer_bboxes =[]
             header_bboxes = []
-            paras_dict = parse_blocks_per_page(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes, footer_bboxes, header_bboxes)
+            exclude_bboxes = image_bboxes + table_bboxes
+            paras_dict = parse_blocks_per_page(page, page_id, image_bboxes, table_bboxes, equations_inline_bboxes, equations_interline_bboxes,  exclude_bboxes, footer_bboxes, header_bboxes)
             
 
             # 最后一步，根据bbox进行从左到右，从上到下的排序，之后拼接起来, 排序
-            all_bboxes = reformat_bboxes(images_box_path_dict, text_bboxes, text_content) # 由于公式目前还没有，所以equation_bboxes是None，多数存在段落里，暂时不解析
+            
+            all_bboxes = reformat_bboxes(images_box_path_dict, paras_dict) # 由于公式目前还没有，所以equation_bboxes是None，多数存在段落里，暂时不解析
             # 返回的是一个数组，每个元素[x0, y0, x1, y1, block_content, idx_x, idx_y], 初始时候idx_x, idx_y都是None. 对于图片、公式来说，block_content是图片的地址， 对于段落来说，block_content是段落的内容
             sorted_bboxes = bbox_sort(all_bboxes)
             markdown_text = concat2markdown(sorted_bboxes)

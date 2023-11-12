@@ -601,7 +601,7 @@ def parse_blocks_per_page(
     }
     """
     page_key = f"page_{page_id}"
-    result_dict = {page_key: {}}
+    result_dict = {"page_id":page_id, page_key: {}}
 
     raw_blocks = page.get_text("dict")["blocks"]
     para_num = 0
