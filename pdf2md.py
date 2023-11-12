@@ -107,11 +107,11 @@ def concat2markdown(all_bboxes:list):
     return content_md
     
 
-@click.command()
-@click.option('--s3-pdf-path', help='s3上pdf文件的路径')
-@click.option('--s3-profile', help='s3上的profile')
-@click.option('--save-path', help='解析出来的图片，文本的保存父目录')
-def main(s3_pdf_path: str, s3_profile: str, save_path: str):
+# @click.command()
+# @click.option('--s3-pdf-path', help='s3上pdf文件的路径')
+# @click.option('--s3-pdf-profile', help='s3上的pdf路径profile')
+# @click.option('--save-path', help='解析出来的图片，文本的保存父目录')
+def main(s3_pdf_path: str, s3_pdf_profile: str, pdf_model_path:str, pdf_model_profile:str, save_path: str):
     """
 
     """
@@ -119,22 +119,27 @@ def main(s3_pdf_path: str, s3_profile: str, save_path: str):
     res_dir_path = None
     exclude_bboxes = []
     
+    
+    
     try:
-        pdf_bytes = read_pdf(s3_pdf_path, s3_profile)
+        pdf_bytes = read_pdf(s3_pdf_path, s3_pdf_profile)
         pdf_docs = fitz.open("pdf", pdf_bytes)
         for page_id, page in enumerate(pdf_docs):
+            model_output_json = os.path.join(pdf_model_path, f"page_{page_id+1}.json") # 模型输出的页面编号从1开始的
+            json_from_docx = read_pdf(model_output_json, pdf_model_profile) # TODO 这个读取方法名字应该改一下，避免语义歧义
+            json_from_docx_obj = json.loads(json_from_docx)
 
             # 解析图片
-            image_bboxes  = parse_images(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
+            image_bboxes  = parse_images(page_id, page, res_dir_path, json_from_docx_obj, exclude_bboxes)
 
             # 解析表格
-            table_bboxes  = parse_tables(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
+            table_bboxes  = parse_tables(page_id, page, res_dir_path, json_from_docx_obj, exclude_bboxes)
 
             # 解析公式
-            equations_interline_bboxes, equations_inline_bboxes = parse_equations(page_id, page, res_dir_path, json_from_DocXchain_dir, exclude_bboxes)
+            equations_interline_bboxes, equations_inline_bboxes = parse_equations(page_id, page, res_dir_path, json_from_docx_obj, exclude_bboxes)
             
             # 把图、表、公式都进行截图，保存到本地，返回图片路径作为内容
-            images_box_path_dict = get_images_by_bboxes(book_name, page_id, page, save_path, s3_profile, image_bboxes, table_bboxes) # 只要表格和图片的截图
+            images_box_path_dict = get_images_by_bboxes(book_name, page_id, page, save_path, s3_pdf_profile, image_bboxes, table_bboxes) # 只要表格和图片的截图
             
             # 解析文字段落
             
@@ -155,7 +160,14 @@ def main(s3_pdf_path: str, s3_profile: str, save_path: str):
 
     except Exception as e:
         print(f"ERROR: {s3_pdf_path}, {e}", file=sys.stderr)
+        logger.exception(e)
 
 
 if __name__ == '__main__':
-    main()
+    pdf_bin_file_path = "s3://llm-raw-snew/llm-raw-scihub/scimag07865000-07865999/10.1007/"
+    pdf_bin_file_profile = "s2"
+    pdf_model_dir = "s3://llm-pdf-text/layout_det/scihub/scimag07865000-07865999/10.1007/"
+    pdf_model_profile = "langchao"
+    
+    pdf_file_name = "s10729-011-9176-5.pdf"
+    main(os.path.join(pdf_bin_file_path, pdf_file_name), pdf_bin_file_profile, os.path.join(pdf_model_dir, pdf_file_name), pdf_model_profile, "./tmp")

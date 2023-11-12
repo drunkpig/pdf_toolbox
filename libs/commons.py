@@ -59,6 +59,56 @@ def read_pdf(pdf_path: str, s3_profile: str):
     else:
         with open(pdf_path, "rb") as f:
             return f.read()
+        
+def list_dir(dir_path:str, s3_profile:str):
+    """
+    列出dir_path下的所有文件
+    """
+    ret = []
+    
+    if dir_path.startswith("s3"):
+        ak, sk, end_point, addressing_style = parse_aws_param(s3_profile)
+        s3info = re.findall(r"s3:\/\/([^\/]+)\/(.*)", dir_path)
+        bucket, path = s3info[0][0], s3info[0][1]
+        try:
+            cli = boto3.client(service_name="s3", aws_access_key_id=ak, aws_secret_access_key=sk, endpoint_url=end_point,
+                                            config=Config(s3={'addressing_style': addressing_style}))
+            def list_obj_scluster():
+                marker = None
+                while True:
+                    list_kwargs = dict(MaxKeys=1000, Bucket=bucket, Prefix=path)
+                    if marker:
+                        list_kwargs['Marker'] = marker
+                    response = cli.list_objects(**list_kwargs)
+                    contents = response.get("Contents", [])
+                    yield from contents
+                    if not response.get("IsTruncated") or len(contents)==0:
+                        break
+                    marker = contents[-1]['Key']
+
+
+            for info in list_obj_scluster():
+                file_path = info['Key']
+                #size = info['Size']
+
+                if path!="":
+                    afile = file_path[len(path):]
+                    if afile.endswith(".json"):
+                        ret.append(f"s3://{bucket}/{file_path}")
+                        
+            return ret
+
+        except Exception as e:
+            logger.exception(e)
+            exit(-1)
+    else: #本地的目录，那么扫描本地目录并返会这个目录里的所有jsonl文件
+        
+        for root, dirs, files in os.walk(dir_path):
+            for file in files:
+                if file.endswith(".json"):
+                    ret.append(os.path.join(root, file))
+        ret.sort()
+        return ret
 
 # def get_s3_object(path):
 #     src_cli_config = Config(**{
@@ -82,3 +132,10 @@ def read_pdf(pdf_path: str, s3_profile: str):
 #     except Exception as e:
 #         logger.error(f"get_s3_object({full_path}) error: {e}")
 #         return b''
+
+if __name__=="__main__":
+    s3_path = "s3://llm-pdf-text/layout_det/scihub/scimag07865000-07865999/10.1007/s10729-011-9175-6.pdf/"
+    s3_profile = "langchao"
+    ret = list_dir(s3_path, s3_profile)
+    print(ret)
+    
