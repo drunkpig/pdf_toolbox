@@ -7,6 +7,7 @@ import boto3, json
 from botocore.config import Config
 import fitz
 from loguru import logger
+from pathlib import Path
 
 from pdf2text_recogFigure_20231107 import parse_images        # 获取figures的bbox
 from pdf2text_recogTable_20231107 import parse_tables         # 获取tables的bbox
@@ -44,6 +45,9 @@ def cut_image(bbox: Tuple, page_num: int, page: fitz.Page, save_parent_path: str
         if not os.path.exists(parent_dir):
             os.makedirs(parent_dir)
         pix.save(image_save_path, jpg_quality=95)
+        # 为了直接能在markdown里看，这里把地址改为相对于mardown的地址
+        pth = Path(image_save_path)
+        image_save_path =  f"{pth.parent.name}/{pth.name}"
 
     return image_save_path
 
@@ -112,18 +116,17 @@ def concat2markdown(all_bboxes:list):
     return content_md
     
 
-# @click.command()
-# @click.option('--s3-pdf-path', help='s3上pdf文件的路径')
-# @click.option('--s3-pdf-profile', help='s3上的pdf路径profile')
-# @click.option('--save-path', help='解析出来的图片，文本的保存父目录')
+
 def main(s3_pdf_path: str, s3_pdf_profile: str, pdf_model_path:str, pdf_model_profile:str, save_path: str):
     """
 
     """
-    book_name = os.path.basename(s3_pdf_path).split(".")[0]
+    pth = Path(s3_pdf_path)
+    book_name = pth.name
+    #book_name = "".join(os.path.basename(s3_pdf_path).split(".")[0:-1])
     res_dir_path = None
     exclude_bboxes = []
-    
+    text_content_save_path = f"{save_path}/{book_name}/book.md"
     
     
     try:
@@ -160,19 +163,35 @@ def main(s3_pdf_path: str, s3_pdf_profile: str, pdf_model_path:str, pdf_model_pr
             # 返回的是一个数组，每个元素[x0, y0, x1, y1, block_content, idx_x, idx_y], 初始时候idx_x, idx_y都是None. 对于图片、公式来说，block_content是图片的地址， 对于段落来说，block_content是段落的内容
             sorted_bboxes = bbox_sort(all_bboxes)
             markdown_text = concat2markdown(sorted_bboxes)
-            print(markdown_text)
-            
+            with open(text_content_save_path, "a") as f:
+                f.write(markdown_text)
+                f.write(chr(12)) #换页符            
 
     except Exception as e:
         print(f"ERROR: {s3_pdf_path}, {e}", file=sys.stderr)
         logger.exception(e)
 
 
-if __name__ == '__main__':
-    pdf_bin_file_path = "s3://llm-raw-snew/llm-raw-scihub/scimag07865000-07865999/10.1007/"
+@click.command()
+@click.option('--pdf-file-sub-path', help='s3上pdf文件的路径')
+@click.option('--save-path', help='解析出来的图片，文本的保存父目录')
+def main_shell(pdf_file_sub_path:str, save_path:str):
+    #pdf_bin_file_path = "s3://llm-raw-snew/llm-raw-scihub/scimag07865000-07865999/10.1007/"
+    pdf_bin_file_parent_path = "s3://llm-raw-snew/llm-raw-scihub/"
     pdf_bin_file_profile = "s2"
-    pdf_model_dir = "s3://llm-pdf-text/layout_det/scihub/scimag07865000-07865999/10.1007/"
+    #pdf_model_dir = "s3://llm-pdf-text/layout_det/scihub/scimag07865000-07865999/10.1007/"
+    pdf_model_parent_dir = "s3://llm-pdf-text/layout_det/scihub/"
     pdf_model_profile = "langchao"
     
-    pdf_file_name = "s10729-011-9176-5.pdf"
-    main(os.path.join(pdf_bin_file_path, pdf_file_name), pdf_bin_file_profile, os.path.join(pdf_model_dir, pdf_file_name), pdf_model_profile, "./tmp")
+    p = Path(pdf_file_sub_path)
+    pdf_parent_path = p.parent
+    pdf_file_name = p.name   # pdf文静名字，含后缀
+    pdf_bin_file_path  = os.path.join(pdf_bin_file_parent_path, pdf_parent_path)
+    pdf_model_dir = os.path.join(pdf_model_parent_dir, pdf_parent_path)
+
+    main(os.path.join(pdf_bin_file_path, pdf_file_name), pdf_bin_file_profile, os.path.join(pdf_model_dir, pdf_file_name), pdf_model_profile, save_path)
+
+if __name__ == '__main__':
+    # 输入可以用以下命令生成批量pdf
+    # aws s3 ls s3://llm-pdf-text/layout_det/scihub/ --profile langchao | tail -n 10 | awk '{print "s3://llm-pdf-text/layout_det/scihub/"$4}' | xargs -I{}  aws s3 ls {} --recursive --profile langchao  | awk '{print substr($4,19)}' | parallel -j 1 echo {//} | sort -u
+    main_shell()
