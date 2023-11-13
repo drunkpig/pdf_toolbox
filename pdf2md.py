@@ -21,37 +21,43 @@ def cut_image(bbox: Tuple, page_num: int, page: fitz.Page, save_parent_path: str
     从第page_num页的page中，根据bbox进行裁剪出一张jpg图片，返回图片路径
     save_path：需要同时支持s3和本地, 图片存放在save_path下，文件名是: {page_num}_{bbox[0]}_{bbox[1]}_{bbox[2]}_{bbox[3]}.jpg , bbox内数字取整。
     """
-    # 将坐标转换为fitz.Rect对象
-    rect = fitz.Rect(*bbox)
-    # 配置缩放倍数为3倍
-    zoom = fitz.Matrix(3, 3)
-    # 截取图片
-    pix = page.get_pixmap(clip=rect, matrix=zoom)
     # 拼接路径
     image_save_path = os.path.join(save_parent_path, f"{page_num}_{int(bbox[0])}_{int(bbox[1])}_{int(bbox[2])}_{int(bbox[3])}.jpg")
-    # 打印图片文件名
-    # print(f"Saved {image_save_path}")
-    if image_save_path.startswith("s3://"):
-        ak, sk, end_point, addressing_style = parse_aws_param(s3_profile)
-        cli = boto3.client(service_name="s3", aws_access_key_id=ak, aws_secret_access_key=sk, endpoint_url=end_point,
-                           config=Config(s3={'addressing_style': addressing_style}))
-        bucket_name, bucket_key = parse_bucket_key(image_save_path)
-        # 将字节流上传到s3
-        cli.upload_fileobj(pix.tobytes(output='jpeg', jpg_quality=95), bucket_name, bucket_key)
-    else:
-        # 保存图片到本地
-        # 先检查一下image_save_path的父目录是否存在，如果不存在，就创建
-        parent_dir = os.path.dirname(image_save_path)
-        if not os.path.exists(parent_dir):
-            os.makedirs(parent_dir)
-        pix.save(image_save_path, jpg_quality=95)
-        # 为了直接能在markdown里看，这里把地址改为相对于mardown的地址
-        pth = Path(image_save_path)
-        image_save_path =  f"{pth.parent.name}/{pth.name}"
+    try:
+        # 将坐标转换为fitz.Rect对象
+        rect = fitz.Rect(*bbox)
+        # 配置缩放倍数为3倍
+        zoom = fitz.Matrix(3, 3)
+        # 截取图片
+        pix = page.get_pixmap(clip=rect, matrix=zoom)
+        
+        # 打印图片文件名
+        # print(f"Saved {image_save_path}")
+        if image_save_path.startswith("s3://"):
+            ak, sk, end_point, addressing_style = parse_aws_param(s3_profile)
+            cli = boto3.client(service_name="s3", aws_access_key_id=ak, aws_secret_access_key=sk, endpoint_url=end_point,
+                            config=Config(s3={'addressing_style': addressing_style}))
+            bucket_name, bucket_key = parse_bucket_key(image_save_path)
+            # 将字节流上传到s3
+            cli.upload_fileobj(pix.tobytes(output='jpeg', jpg_quality=95), bucket_name, bucket_key)
+        else:
+            # 保存图片到本地
+            # 先检查一下image_save_path的父目录是否存在，如果不存在，就创建
+            parent_dir = os.path.dirname(image_save_path)
+            if not os.path.exists(parent_dir):
+                os.makedirs(parent_dir)
+            pix.save(image_save_path, jpg_quality=95)
+            # 为了直接能在markdown里看，这里把地址改为相对于mardown的地址
+            pth = Path(image_save_path)
+            image_save_path =  f"{pth.parent.name}/{pth.name}"
+            return image_save_path
+    except Exception as e:
+        logger.exception(e)
+        return image_save_path
 
-    return image_save_path
+    
 
-def get_images_by_bboxes(book_name:str, page_num:int, page: fitz.Page, save_path:str, s3_profile:str, image_bboxes:list, table_bboxes:list) -> dict:
+def get_images_by_bboxes(book_name:str, page_num:int, page: fitz.Page, save_path:str, s3_profile:str, image_bboxes:list, table_bboxes:list, equation_inline_bboxes:list, equation_interline_bboxes:list) -> dict:
     """
     返回一个dict, key为bbox, 值是图片地址
     """
@@ -60,7 +66,8 @@ def get_images_by_bboxes(book_name:str, page_num:int, page: fitz.Page, save_path
     # 图片的保存路径组成是这样的： {s3_or_local_path}/{book_name}/{images|tables|equations}/{page_num}_{bbox[0]}_{bbox[1]}_{bbox[2]}_{bbox[3]}.jpg
     image_save_path = os.path.join(save_path, book_name, "images") 
     table_save_path = os.path.join(save_path, book_name, "tables") 
-    equation_save_path = os.path.join(save_path, book_name, "equations")
+    equation_inline_save_path = os.path.join(save_path, book_name, "equations_inline")
+    equation_interline_save_path = os.path.join(save_path, book_name, "equation_interline")
     
     for bbox in image_bboxes:
         image_path = cut_image(bbox, page_num, page, image_save_path, s3_profile)
@@ -69,6 +76,13 @@ def get_images_by_bboxes(book_name:str, page_num:int, page: fitz.Page, save_path
     for bbox in table_bboxes:
         image_path = cut_image(bbox, page_num, page, table_save_path, s3_profile)
         ret[bbox] = (image_path, "table")
+        
+    # 对公式目前只截图，不返回
+    for bbox in equation_inline_bboxes:
+        cut_image(bbox, page_num, page, equation_inline_save_path, s3_profile)
+        
+    for bbox in equation_interline_bboxes:
+        cut_image(bbox, page_num, page, equation_interline_save_path, s3_profile)
         
     return ret
         
@@ -127,6 +141,7 @@ def main(s3_pdf_path: str, s3_pdf_profile: str, pdf_model_path:str, pdf_model_pr
     res_dir_path = None
     exclude_bboxes = []
     text_content_save_path = f"{save_path}/{book_name}/book.md"
+    metadata_save_path = f"{save_path}/{book_name}/metadata.json"  
     
     
     try:
@@ -147,7 +162,7 @@ def main(s3_pdf_path: str, s3_pdf_profile: str, pdf_model_path:str, pdf_model_pr
             equations_interline_bboxes, equations_inline_bboxes = parse_equations(page_id, page, res_dir_path, json_from_docx_obj, exclude_bboxes)
             
             # 把图、表、公式都进行截图，保存到本地，返回图片路径作为内容
-            images_box_path_dict = get_images_by_bboxes(book_name, page_id, page, save_path, s3_pdf_profile, image_bboxes, table_bboxes) # 只要表格和图片的截图
+            images_box_path_dict = get_images_by_bboxes(book_name, page_id, page, save_path, s3_pdf_profile, image_bboxes, table_bboxes, equations_inline_bboxes, equations_interline_bboxes) # 只要表格和图片的截图
             
             # 解析文字段落
             
@@ -170,8 +185,13 @@ def main(s3_pdf_path: str, s3_pdf_profile: str, pdf_model_path:str, pdf_model_pr
             
             with open(text_content_save_path, "a") as f:
                 f.write(markdown_text)
-                f.write(chr(12)) #换页符            
-
+                f.write(chr(12)) #换页符   
+        # end for
+        # 写一个小的json,记录元数据
+        metadata = {"book_name": book_name, "pdf_path": s3_pdf_path, "pdf_model_path": pdf_model_path, "save_path": save_path}
+        with open(metadata_save_path, "w") as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=4)
+             
     except Exception as e:
         print(f"ERROR: {s3_pdf_path}, {e}", file=sys.stderr)
         logger.exception(e)
