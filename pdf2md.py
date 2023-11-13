@@ -163,6 +163,11 @@ def main(s3_pdf_path: str, s3_pdf_profile: str, pdf_model_path:str, pdf_model_pr
             # 返回的是一个数组，每个元素[x0, y0, x1, y1, block_content, idx_x, idx_y], 初始时候idx_x, idx_y都是None. 对于图片、公式来说，block_content是图片的地址， 对于段落来说，block_content是段落的内容
             sorted_bboxes = bbox_sort(all_bboxes)
             markdown_text = concat2markdown(sorted_bboxes)
+            
+            parent_dir = os.path.dirname(text_content_save_path)
+            if not os.path.exists(parent_dir):
+                os.makedirs(parent_dir)
+            
             with open(text_content_save_path, "a") as f:
                 f.write(markdown_text)
                 f.write(chr(12)) #换页符            
