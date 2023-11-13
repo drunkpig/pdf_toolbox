@@ -179,68 +179,6 @@ def combine_lines(block, y_tolerance):
 
     return combined_lines
 
-# TODO
-def is_footer_line(line_bbox, footer_bboxes, avg_char_height):
-    """
-    This function checks if the line is a footer line.
-
-    Parameters
-    ----------
-    line_bbox : list
-        line bbox
-    footer_bboxes : list
-        footer bboxes
-    avg_char_height : float
-        average char height
-
-    Returns
-    -------
-    bool
-        True if the line is a footer line, False otherwise.
-
-    """
-    x0, y0, x1, y1 = line_bbox
-    for footer_bbox in footer_bboxes:
-        if (
-            abs(y0 - footer_bbox[1]) < avg_char_height
-            and abs(y1 - footer_bbox[3]) < avg_char_height
-            and abs(x0 - footer_bbox[0]) < avg_char_height
-            and abs(x1 - footer_bbox[2]) < avg_char_height
-        ):
-            return True
-    return False
-
-
-# TODO
-def is_header_line(line_bbox, header_bboxes, avg_char_height):
-    """
-    This function checks if the line is a header line.
-
-    Parameters
-    ----------
-    line_bbox : list
-        line bbox
-    header_bboxes : list
-        header bboxes
-    avg_char_height : float
-        average char height
-
-    Returns
-    -------
-    bool
-        True if the line is a header line, False otherwise.
-
-    """
-    x0, y0, x1, y1 = line_bbox
-    for header_bbox in header_bboxes:
-        if (
-            abs(y0 - header_bbox[1]) < avg_char_height
-            and abs(y1 - header_bbox[3]) < avg_char_height
-            and abs(x0 - header_bbox[0]) < avg_char_height
-            and abs(x1 - header_bbox[2]) < avg_char_height
-        ):
-            return True
-    return False
 
 def is_regular_line(
     line_bbox, prev_line_bbox, next_line_bbox, avg_char_height, X0, X1, avg_char_width
@@ -271,20 +209,32 @@ def is_regular_line(
     return regular_x0 and regular_x1 and regular_y
 
 
-def is_possible_start_of_para(line_bbox, prev_line_bbox, X0, X1, avg_char_width):
-    horizontal_ratio = 1.2
-    N = 1
+def is_possible_start_of_para(
+    line_bbox, prev_line_bbox, X0, X1, avg_char_width, avg_line_height
+):
+    horizontal_ratio = 1
+    vertical_ratio = 1
+    indent_ratio = 1
     horizontal_thres = horizontal_ratio * avg_char_width
+    vertical_thres = vertical_ratio * avg_line_height
 
-    x0, _, x1, _ = line_bbox
+    x0, y0, x1, _ = line_bbox
 
-    indent_condition = x0 > X0 + N * avg_char_width
+    indent_condition = x0 > X0 + indent_ratio * avg_char_width
     x1_near_X1 = abs(x1 - X1) < horizontal_thres
     prev_line_is_end_of_para = prev_line_bbox and (
         abs(prev_line_bbox[2] - X1) > avg_char_width
     )
 
-    if indent_condition and x1_near_X1:
+    if prev_line_bbox:
+        vertical_spacing = y0 - prev_line_bbox[3] - avg_line_height
+        sufficient_vertical_spacing = vertical_spacing > vertical_thres
+    else:
+        sufficient_vertical_spacing = False
+
+    if sufficient_vertical_spacing:
+        return True
+    elif indent_condition and x1_near_X1:
         return True
     elif not indent_condition and x1_near_X1 and prev_line_is_end_of_para:
         return True
@@ -392,6 +342,13 @@ def process_block(
         span["text"] for line in raw_block["lines"] for span in line["spans"]
     )
 
+    font_type = raw_block["lines"][0]["spans"][0][
+        "font"
+    ]  # may be None if the block is an image or table or equation
+    font_size = raw_block["lines"][0]["spans"][0][
+        "size"
+    ]  # may be None if the block is an image or table or equation
+
     # Check for overlap with images, tables, equations, headers, and footers
     is_overlap = any(
         is_bbox_overlap(bbox, other_bbox)
@@ -447,7 +404,7 @@ def process_block(
         )
 
         if not in_paragraph and is_possible_start_of_para(
-            line_bbox, prev_line_bbox, X0, X1, avg_char_width
+            line_bbox, prev_line_bbox, X0, X1, avg_char_width, avg_char_height
         ):
             in_paragraph = True
             start_of_para = line_index
@@ -515,6 +472,8 @@ def process_block(
     processed_block = {
         "bbox": bbox,
         "text": text,
+        "font_type": font_type,
+        "font_size": font_size,
         "is_segmented": 1 if processed_paras else 0,
         "is_overlap": is_overlap,
         "paras": processed_paras,
@@ -601,7 +560,7 @@ def parse_blocks_per_page(
     }
     """
     page_key = f"page_{page_id}"
-    result_dict = {"page_id":page_id, page_key: {}}
+    result_dict = {"page_id": page_id, page_key: {}}
 
     raw_blocks = page.get_text("dict")["blocks"]
     para_num = 0
@@ -627,6 +586,8 @@ def parse_blocks_per_page(
             result_dict[page_key][block_key] = {
                 "bbox": processed_block["bbox"],
                 "text": processed_block["text"],
+                "font_type": processed_block.get("font_type", ""),
+                "font_size": processed_block.get("font_size", ""),
                 "is_segmented": processed_block["is_segmented"],
                 "is_overlap": processed_block["is_overlap"],
                 "paras": {},
@@ -642,6 +603,206 @@ def parse_blocks_per_page(
                 }
 
     return result_dict
+
+
+def compare_bbox(bbox1, bbox2):
+    """
+    This function compares the bbox1 and bbox2
+
+    Parameters
+    ----------
+    bbox1 : list
+        bbox1
+    bbox2 : list
+        bbox2
+
+    Returns
+    -------
+    is_same : bool
+        True if bbox1 and bbox2 are the same, else False
+
+    """
+    x0_1, y0_1, x1_1, y1_1 = bbox1
+    x0_2, y0_2, x1_2, y1_2 = bbox2
+
+    is_same = (
+        abs(x0_1 - x0_2) < 1
+        and abs(y0_1 - y0_2) < 1
+        and abs(x1_1 - x1_2) < 1
+        and abs(y1_1 - y1_2) < 1
+    )
+
+    return is_same
+
+
+def get_min_bbox_by_area(bboxes):
+    """
+    This function gets the min bbox from the bboxes, minimum bbox is defined as the truely existed bbox with the minimum area
+
+    Parameters
+    ----------
+    bboxes : list
+        bboxes
+
+    Returns
+    -------
+    min_bbox : list
+        min bbox
+
+    """
+    min_bbox = None
+    min_area = float("inf")
+
+    for bbox in bboxes:
+        x0, y0, x1, y1 = bbox
+        area = (x1 - x0) * (y1 - y0)
+        if area < min_area:
+            min_area = area
+            min_bbox = bbox
+
+    return min_bbox
+
+
+def get_min_bbox_by_coor(bboxes):
+    """
+    This function gets the min bbox from the bboxes, minimum bbox is defined as the bbox with the minimum x0, minimum y0, maximum x1, maximum y1
+
+    Parameters
+    ----------
+    bboxes : list
+        bboxes
+
+    Returns
+    -------
+    min_bbox : list
+        min bbox
+
+    """
+    min_bbox = None
+    min_x0 = float("inf")
+    min_y0 = float("inf")
+    max_x1 = -float("inf")
+    max_y1 = -float("inf")
+
+    for bbox in bboxes:
+        x0, y0, x1, y1 = bbox
+        if x0 < min_x0:
+            min_x0 = x0
+        if y0 < min_y0:
+            min_y0 = y0
+        if x1 > max_x1:
+            max_x1 = x1
+        if y1 > max_y1:
+            max_y1 = y1
+
+    min_bbox = [min_x0, min_y0, max_x1, max_y1]
+
+    return min_bbox
+
+
+def compare_text(text1, text2):
+    """
+    This function compares the text1 and text2, use distance to measure the similarity
+
+    Parameters
+    ----------
+    text1 : str
+        text1
+    text2 : str
+        text2
+
+    Returns
+    -------
+    similarity : float
+        similarity between text1 and text2, keep 2 decimal places.
+    """
+    from difflib import SequenceMatcher
+
+    similarity = round(SequenceMatcher(None, text1, text2).ratio(), 2)
+
+    print(f"text1: {text1}")
+    print(f"text2: {text2}")
+    print(f"similarity: {similarity}")
+
+    return similarity
+
+
+def detect_footer_header(result_dict):
+    """
+    open result_json
+    遍历所有的bboxes
+    寻找最高频出现的最小bbox，得到最小 min_bbox，存储在min_bbox中，对应的text存储在min_text中
+    如果bbox等于或者非常接近于min_bbox，则认为是页眉或者页脚
+    否则判断bbox的text和min_text相似度大于0.8，则认为是页眉或者页脚
+    标记符合条件的出现在页面前面的block为页眉
+    标记符合条件的出现在页面后面的block为页脚
+
+    返回结果：
+    在返回的json中对block新增一个标签
+            1. is_footer: [0,1]内的一个概率
+            2. is_header: [0,1]内的一个概率
+
+    """
+    from collections import Counter
+    from difflib import SequenceMatcher
+    import json
+    import copy
+
+    for page_id, blocks in result_dict.items():
+        if page_id.startswith("page_"):
+            blocks = blocks
+
+            # get all bboxes
+            bboxes = []
+            for block_key, block_info in blocks.items():
+                if block_key.startswith("block_"):
+                    bbox = block_info["bbox"]
+                    bboxes.append(bbox)
+
+            # get the min bbox with all minimum coordinates
+            # min_bbox = get_min_bbox(bboxes)
+
+            # get the min bbox with the minimum area
+            min_area_bbox = get_min_bbox_by_area(bboxes)
+
+            print(f"min_area_bbox: {min_area_bbox}")
+
+            # get the min text with the min_area_bbox
+            min_text = None
+            for block_key, block_info in blocks.items():
+                if block_key.startswith("block_"):
+                    bbox = block_info["bbox"]
+                    text = block_info["text"]
+                    if compare_bbox(bbox, min_area_bbox):
+                        min_text = text
+                        break
+
+            # detect header and footer
+            for block_key, block_info in blocks.items():
+                if block_key.startswith("block_"):
+                    bbox = block_info["bbox"]
+                    text = block_info["text"]
+
+                    # if bbox == min_bbox:
+                    #     block_info["is_header"] = 1
+                    #     block_info["is_footer"] = 0
+                    #     continue
+
+                    if compare_bbox(bbox, min_area_bbox):
+                        block_info["is_header"] = 1
+                        block_info["is_footer"] = 0
+                        continue
+
+                    # if compare_text(text, min_text) > 0.8:
+                    #     block_info["is_header"] = 1
+                    #     block_info["is_footer"] = 0
+                    #     continue
+
+                    block_info["is_header"] = 0
+                    block_info["is_footer"] = 0
+
+            # update result_dict
+            result_dict[page_id] = blocks
 
 
 def draw_block_border(page, block_color, block):
@@ -728,7 +889,7 @@ def draw_blocks_lines_spans(pdf_path, output_pdf_path):
                 )
 
                 if not in_paragraph and is_possible_start_of_para(
-                    line_bbox, prev_line_bbox, X0, X1, avg_char_width
+                    line_bbox, prev_line_bbox, X0, X1, avg_char_width, avg_char_height
                 ):
                     in_paragraph = True
                     start_of_para = line_index
@@ -825,6 +986,11 @@ if __name__ == "__main__":
         pageID_interline_equationBboxs,
     ) = get_test_data(test_json_file, not_print_data=True)
 
+    if not pdf_path == DEFAULT_PDF_PATH:
+        pageID_imageBboxs = []
+        pageID_tableBboxs = []
+        pageID_interline_equationBboxs = []
+
     pageID_inline_equationBboxs = []
 
     # parse paragraph and save to json file
@@ -855,6 +1021,9 @@ if __name__ == "__main__":
         )
 
         pdf_dic[f"page_{page_id}"] = result_dict[f"page_{page_id}"]
+
+    # handle the header and footer
+    detect_footer_header(pdf_dic)
 
     output_json_file = (
         "test/assets/paper/pdf_dic.json"
@@ -904,7 +1073,7 @@ if __name__ == "__main__":
                     for para_key, para in block["paras"].items():
                         para_rect = fitz.Rect(para["bbox"])
                         para_annot = page.add_rect_annot(para_rect)
-                        # Green for matched paragraphs, yellow for unmatched
+                        # Green for matched paragraphs, red for unmatched
                         stroke_color = (
                             (0, 1, 0)
                             if para["is_matched"] == 1
