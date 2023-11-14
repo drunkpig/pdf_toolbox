@@ -5,6 +5,9 @@ import json
 import fitz  # PyMuPDF
 import numpy as np
 
+from difflib import SequenceMatcher
+from collections import defaultdict
+
 
 def open_pdf(pdf_path):
     try:
@@ -80,7 +83,8 @@ def collect_bbox_values(
     line_heights : list
         line heights of the bbox
     """
-    for i, line in enumerate(combined_lines[1:-1], 1):  # Skip first and last lines
+    # for i, line in enumerate(combined_lines[1:-1], 1):  # Skip first and last lines
+    for i, line in enumerate(combined_lines):
         bbox = line["bbox"]
         text = line["text"]
 
@@ -93,12 +97,22 @@ def collect_bbox_values(
             char_width = (bbox[2] - bbox[0]) / num_chars
             char_widths.append(char_width)
 
-        if i > 1:  # Calculate row height from the second row
+        if len(combined_lines) == 1:
+            # 如果这是页面上的第一个块，直接使用块的高度
+            if i == 0:
+                line_height = bbox[3] - bbox[1]
+            else:
+                # 使用前一个块的下边界和当前块的上边界来计算行高
+                prev_bbox = combined_lines[i - 1]["bbox"]
+                line_height = bbox[1] - prev_bbox[1]
+            line_heights.append(line_height)
+        elif i > 0:  # Calculate row height from the second line onwards
             prev_bbox = combined_lines[i - 1]["bbox"]
             line_height = max(
                 (bbox[1] - prev_bbox[1]) / 2, (prev_bbox[3] - bbox[3]) / 2
             )
             line_heights.append(line_height)
+
 
 
 def calculate_paragraph_metrics(combined_lines):
@@ -127,7 +141,7 @@ def calculate_paragraph_metrics(combined_lines):
     char_widths = []
     line_heights = []
 
-    if len(combined_lines) > 2:
+    if len(combined_lines) > 0:
         collect_bbox_values(
             combined_lines, x0_values, x1_values, char_widths, line_heights
         )
@@ -210,33 +224,66 @@ def is_regular_line(
 
 
 def is_possible_start_of_para(
-    line_bbox, prev_line_bbox, X0, X1, avg_char_width, avg_line_height
+    line_bbox, prev_line_bbox, next_line_bbox, X0, X1, avg_char_width, avg_line_height
 ):
-    horizontal_ratio = 1
-    vertical_ratio = 1
+    horizontal_ratio = 1.5
+    vertical_ratio = 0.6
+    central_ratio = 2
+    title_length_ratio = 0.6
     indent_ratio = 1
     horizontal_thres = horizontal_ratio * avg_char_width
     vertical_thres = vertical_ratio * avg_line_height
 
-    x0, y0, x1, _ = line_bbox
+    x0, y0, x1, y1 = line_bbox
 
     indent_condition = x0 > X0 + indent_ratio * avg_char_width
+    x0_near_X0 = abs(x0 - X0) < horizontal_thres
     x1_near_X1 = abs(x1 - X1) < horizontal_thres
+    line_length = x1 - x0
+    title_length_condition = line_length < (X1 - X0) * title_length_ratio
+
     prev_line_is_end_of_para = prev_line_bbox and (
         abs(prev_line_bbox[2] - X1) > avg_char_width
     )
 
     if prev_line_bbox:
-        vertical_spacing = y0 - prev_line_bbox[3] - avg_line_height
-        sufficient_vertical_spacing = vertical_spacing > vertical_thres
+        vertical_spacing_above = y0 - prev_line_bbox[3]
+        sufficient_vertical_spacing_above = vertical_spacing_above > vertical_thres
     else:
-        sufficient_vertical_spacing = False
+        sufficient_vertical_spacing_above = False
 
-    if sufficient_vertical_spacing:
+    if next_line_bbox:
+        vertical_spacing_below = next_line_bbox[1] - y1
+        sufficient_vertical_spacing_below = vertical_spacing_below > vertical_thres
+        normal_vertical_spacing_below = (
+            vertical_spacing_below <= avg_line_height * vertical_ratio
+        )
+
+    else:
+        sufficient_vertical_spacing_below = False
+        normal_vertical_spacing_below = True
+
+    # check if the line is a title
+    if sufficient_vertical_spacing_above and (
+        normal_vertical_spacing_below or sufficient_vertical_spacing_above
+    ):
+        center_condition = (
+            abs((x0 + x1) / 2 - (X0 + X1) / 2) < avg_char_width * central_ratio
+        )
+        left_align_condition = x0_near_X0
+
+        if title_length_condition and (center_condition or left_align_condition):
+            return True
+
+    if sufficient_vertical_spacing_above and sufficient_vertical_spacing_below:
         return True
-    elif indent_condition and x1_near_X1:
+    elif sufficient_vertical_spacing_above:
         return True
-    elif not indent_condition and x1_near_X1 and prev_line_is_end_of_para:
+    elif indent_condition and (x1_near_X1 or not x0_near_X0):
+        return True
+    elif not indent_condition and x0_near_X0 and x1_near_X1:
+        return True
+    elif prev_line_is_end_of_para:
         return True
     return False
 
@@ -383,6 +430,9 @@ def process_block(
 
     # Combine lines and calculate metrics for paragraph segmentation
     combined_lines = combine_lines(raw_block, y_tolerance)
+
+    # print("combined_lines: ", combined_lines)
+
     X0, X1, avg_char_width, avg_char_height = calculate_paragraph_metrics(
         combined_lines
     )
@@ -404,7 +454,13 @@ def process_block(
         )
 
         if not in_paragraph and is_possible_start_of_para(
-            line_bbox, prev_line_bbox, X0, X1, avg_char_width, avg_char_height
+            line_bbox,
+            prev_line_bbox,
+            next_line_bbox,
+            X0,
+            X1,
+            avg_char_width,
+            avg_char_height,
         ):
             in_paragraph = True
             start_of_para = line_index
@@ -472,6 +528,10 @@ def process_block(
     processed_block = {
         "bbox": bbox,
         "text": text,
+        "X0": X0,
+        "X1": X1,
+        "avg_char_width": avg_char_width,
+        "avg_char_height": avg_char_height,
         "font_type": font_type,
         "font_size": font_size,
         "is_segmented": 1 if processed_paras else 0,
@@ -586,6 +646,10 @@ def parse_blocks_per_page(
             result_dict[page_key][block_key] = {
                 "bbox": processed_block["bbox"],
                 "text": processed_block["text"],
+                "X0": processed_block["X0"],
+                "X1": processed_block["X1"],
+                "avg_char_width": processed_block["avg_char_width"],
+                "avg_char_height": processed_block["avg_char_height"],
                 "font_type": processed_block.get("font_type", ""),
                 "font_size": processed_block.get("font_size", ""),
                 "is_segmented": processed_block["is_segmented"],
@@ -603,36 +667,6 @@ def parse_blocks_per_page(
                 }
 
     return result_dict
-
-
-def compare_bbox(bbox1, bbox2):
-    """
-    This function compares the bbox1 and bbox2
-
-    Parameters
-    ----------
-    bbox1 : list
-        bbox1
-    bbox2 : list
-        bbox2
-
-    Returns
-    -------
-    is_same : bool
-        True if bbox1 and bbox2 are the same, else False
-
-    """
-    x0_1, y0_1, x1_1, y1_1 = bbox1
-    x0_2, y0_2, x1_2, y1_2 = bbox2
-
-    is_same = (
-        abs(x0_1 - x0_2) < 1
-        and abs(y0_1 - y0_2) < 1
-        and abs(x1_1 - x1_2) < 1
-        and abs(y1_1 - y1_2) < 1
-    )
-
-    return is_same
 
 
 def get_min_bbox_by_area(bboxes):
@@ -700,7 +734,7 @@ def get_min_bbox_by_coor(bboxes):
     return min_bbox
 
 
-def compare_text(text1, text2):
+def compare_text_similarity(text1, text2):
     """
     This function compares the text1 and text2, use distance to measure the similarity
 
@@ -716,93 +750,138 @@ def compare_text(text1, text2):
     similarity : float
         similarity between text1 and text2, keep 2 decimal places.
     """
-    from difflib import SequenceMatcher
 
     similarity = round(SequenceMatcher(None, text1, text2).ratio(), 2)
-
-    print(f"text1: {text1}")
-    print(f"text2: {text2}")
-    print(f"similarity: {similarity}")
 
     return similarity
 
 
+def compare_bbox(bbox1, bbox2, tolerance=1):
+    """
+    This function compares the bbox1 and bbox2
+
+    Parameters
+    ----------
+    bbox1 : list
+        bbox1
+    bbox2 : list
+        bbox2
+    tolerance : int, optional
+
+    Returns
+    -------
+    is_same : bool
+        True if bbox1 and bbox2 are the same, else False
+
+    """
+    return all(abs(a - b) < tolerance for a, b in zip(bbox1, bbox2))
+
+
+def get_most_common_bboxes(
+    bboxes, page_height, position="top", threshold=0.25, num_bboxes=3, min_frequency=2
+):
+    # 根据位置筛选bbox
+    if position == "top":
+        filtered_bboxes = [bbox for bbox in bboxes if bbox[1] < page_height * threshold]
+    else:
+        filtered_bboxes = [
+            bbox for bbox in bboxes if bbox[3] > page_height * (1 - threshold)
+        ]
+
+    # 找到最常见的bbox
+    bbox_count = defaultdict(int)
+    for bbox in filtered_bboxes:
+        bbox_count[tuple(bbox)] += 1
+
+    # 获取频率最高的几个bbox，但只有当出现次数超过min_frequency时才考虑
+    common_bboxes = [
+        bbox
+        for bbox, count in sorted(
+            bbox_count.items(), key=lambda item: item[1], reverse=True
+        )
+        if count >= min_frequency
+    ][:num_bboxes]
+    return common_bboxes
+
+
 def detect_footer_header(result_dict):
-    """
-    open result_json
-    遍历所有的bboxes
-    寻找最高频出现的最小bbox，得到最小 min_bbox，存储在min_bbox中，对应的text存储在min_text中
-    如果bbox等于或者非常接近于min_bbox，则认为是页眉或者页脚
-    否则判断bbox的text和min_text相似度大于0.8，则认为是页眉或者页脚
-    标记符合条件的出现在页面前面的block为页眉
-    标记符合条件的出现在页面后面的block为页脚
+    def compare_bbox_with_list(bbox, bbox_list, tolerance=1):
+        return any(
+            all(abs(a - b) < tolerance for a, b in zip(bbox, common_bbox))
+            for common_bbox in bbox_list
+        )
 
-    返回结果：
-    在返回的json中对block新增一个标签
-            1. is_footer: [0,1]内的一个概率
-            2. is_header: [0,1]内的一个概率
+    def is_single_line_block(block):
+        # 根据块的宽度和高度判断
+        block_width = block["X1"] - block["X0"]
+        block_height = block["bbox"][3] - block["bbox"][1]
 
-    """
-    from collections import Counter
-    from difflib import SequenceMatcher
-    import json
-    import copy
+        # 如果块的高度接近平均字符高度，且宽度较大，则认为是单行
+        return block_height <= block["avg_char_height"] * 1.5 and block_width > block["avg_char_width"] * 10
 
+    # 遍历文档中的所有块
+    single_line_blocks = 0
+    total_blocks = 0
     for page_id, blocks in result_dict.items():
         if page_id.startswith("page_"):
-            blocks = blocks
-
-            # get all bboxes
-            bboxes = []
-            for block_key, block_info in blocks.items():
+            for block_key, block in blocks.items():
                 if block_key.startswith("block_"):
-                    bbox = block_info["bbox"]
-                    bboxes.append(bbox)
+                    total_blocks += 1
+                    if is_single_line_block(block):
+                        single_line_blocks += 1
 
-            # get the min bbox with all minimum coordinates
-            # min_bbox = get_min_bbox(bboxes)
+    # 如果大多数块是单行的，则跳过页眉页脚检测
+    if single_line_blocks / total_blocks > 0.5:  # 阈值可以调整
+        print("Skipping header/footer detection for text-dense document.")
+        return result_dict
 
-            # get the min bbox with the minimum area
-            min_area_bbox = get_min_bbox_by_area(bboxes)
-
-            print(f"min_area_bbox: {min_area_bbox}")
-
-            # get the min text with the min_area_bbox
-            min_text = None
-            for block_key, block_info in blocks.items():
+    # Collect the bounding boxes of all blocks
+    all_bboxes = []
+    for page_id, blocks in result_dict.items():
+        if page_id.startswith("page_"):
+            for block_key, block in blocks.items():
                 if block_key.startswith("block_"):
-                    bbox = block_info["bbox"]
-                    text = block_info["text"]
-                    if compare_bbox(bbox, min_area_bbox):
-                        min_text = text
-                        break
+                    all_bboxes.append(block["bbox"])
 
-            # detect header and footer
-            for block_key, block_info in blocks.items():
+    # Get the height of the page
+    page_height = max(bbox[3] for bbox in all_bboxes)
+
+    # Get the most common bbox lists for headers and footers
+    common_header_bboxes = get_most_common_bboxes(
+        all_bboxes, page_height, position="top"
+    )
+    common_footer_bboxes = get_most_common_bboxes(
+        all_bboxes, page_height, position="bottom"
+    )
+
+    # bboxes in common_header_bboxes or common_footer_bboxes should occur at least in 80% of the pages
+
+    # print("common_header_bboxes: ", common_header_bboxes)
+    # print("common_footer_bboxes: ", common_footer_bboxes)
+
+    # Detect and mark headers and footers
+    for page_id, blocks in result_dict.items():
+        if page_id.startswith("page_"):
+            for block_key, block in blocks.items():
                 if block_key.startswith("block_"):
-                    bbox = block_info["bbox"]
-                    text = block_info["text"]
+                    bbox = block["bbox"]
+                    text = block["text"]
 
-                    # if bbox == min_bbox:
-                    #     block_info["is_header"] = 1
-                    #     block_info["is_footer"] = 0
-                    #     continue
+                    is_header = compare_bbox_with_list(bbox, common_header_bboxes)
+                    is_footer = compare_bbox_with_list(bbox, common_footer_bboxes)
 
-                    if compare_bbox(bbox, min_area_bbox):
-                        block_info["is_header"] = 1
-                        block_info["is_footer"] = 0
-                        continue
+                    block["is_header"] = int(is_header)
+                    block["is_footer"] = int(is_footer)
 
-                    # if compare_text(text, min_text) > 0.8:
-                    #     block_info["is_header"] = 1
-                    #     block_info["is_footer"] = 0
-                    #     continue
+                    # if is_header:
+                    #     print("header_bbox: ", bbox)
+                    #     print("header_text: ", text)
 
-                    block_info["is_header"] = 0
-                    block_info["is_footer"] = 0
+                    # if is_footer:
+                    #     print("footer_bbox: ", bbox)
+                    #     print("footer_text: ", text)
 
-            # update result_dict
-            result_dict[page_id] = blocks
+    return result_dict
 
 
 def draw_block_border(page, block_color, block):
@@ -889,7 +968,13 @@ def draw_blocks_lines_spans(pdf_path, output_pdf_path):
                 )
 
                 if not in_paragraph and is_possible_start_of_para(
-                    line_bbox, prev_line_bbox, X0, X1, avg_char_width, avg_char_height
+                    line_bbox,
+                    prev_line_bbox,
+                    next_line_bbox,
+                    X0,
+                    X1,
+                    avg_char_width,
+                    avg_char_height,
                 ):
                     in_paragraph = True
                     start_of_para = line_index
@@ -912,7 +997,7 @@ def draw_blocks_lines_spans(pdf_path, output_pdf_path):
 
 def get_test_data(file_path, not_print_data=True):
     """
-    从文件中获取测试数据
+    This function gets the test data from json file
     """
     import json
 
@@ -1041,6 +1126,8 @@ if __name__ == "__main__":
             if block_key.startswith("block_"):
                 is_block_segmented = block["is_segmented"]
                 is_block_overlap = block["is_overlap"]
+                is_block_header = block.get("is_header", 0)
+                is_block_footer = block.get("is_footer", 0)
 
                 """
                 Color code:
@@ -1055,38 +1142,35 @@ if __name__ == "__main__":
                     Gray: (0.5, 0.5, 0.5) - equal and medium intensity of red, green and blue color components
                     Orange: (1, 0.65, 0) - maximum intensity of red, medium intensity of green, no blue component
                 """
-                if not is_block_segmented:
-                    # Draw rectangle for the entire block
-                    rect_color = (
-                        (0, 1, 1) if is_block_overlap else (0, 0, 1)
-                    )  # if is_block_overlap is True, then the color is Cyan, else the color is blue
-                    rect_width = (
-                        2 if is_block_overlap else 1
-                    )  # if is_block_overlap is True, then the width is 2, else the width is 1
+
+                # 如果块是页眉或页脚，使用橙色标注
+                if is_block_header or is_block_footer:
+                    rect_color = (1, 0.65, 0)  # 橙色
+                    rect_width = 2  # 页眉和页脚的边框宽度
+                    block_rect = fitz.Rect(block["bbox"])
+                    block_annot = page.add_rect_annot(block_rect)
+                    block_annot.set_colors(stroke=rect_color)
+                    block_annot.set_border(width=rect_width)
+                    block_annot.update()
+                elif not is_block_segmented:
+                    # 绘制整个块的矩形
+                    rect_color = (0, 1, 1) if is_block_overlap else (0, 0, 1)  # 蓝色或青色
+                    rect_width = 2 if is_block_overlap else 1
                     block_rect = fitz.Rect(block["bbox"])
                     block_annot = page.add_rect_annot(block_rect)
                     block_annot.set_colors(stroke=rect_color)
                     block_annot.set_border(width=rect_width)
                     block_annot.update()
                 else:
-                    # Draw rectangles for each paragraph in the block
+                    # 绘制每个段落的矩形
                     for para_key, para in block["paras"].items():
                         para_rect = fitz.Rect(para["bbox"])
                         para_annot = page.add_rect_annot(para_rect)
-                        # Green for matched paragraphs, red for unmatched
                         stroke_color = (
-                            (0, 1, 0)
-                            if para["is_matched"] == 1
-                            else (
-                                1,
-                                0,
-                                0,
-                            )  # if para["is_matched"] is True, then the color is Green, else the color is Red
-                        )
+                            (0, 1, 0) if para["is_matched"] == 1 else (1, 0, 0)
+                        )  # 绿色或红色
                         para_annot.set_colors(stroke=stroke_color)
-                        para_annot.set_border(
-                            width=0.5
-                        )  # if border width of para is always 0.5
+                        para_annot.set_border(width=0.5)
                         para_annot.update()
 
     pdf_doc.save(output_pdf_path)
