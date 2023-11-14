@@ -47,10 +47,10 @@ def parse_titles(page_ID: int, page: fitz.Page, res_dir_path: str, json_from_Doc
         U = xf['poly'][1] / UD_scaleRatio
         R = xf['poly'][2] / LR_scaleRatio
         D = xf['poly'][5] / UD_scaleRatio
-        L += pageL          # 有的页面，artBox偏移了。不在（0,0）
-        R += pageL
-        U += pageU
-        D += pageU
+        # L += pageL          # 有的页面，artBox偏移了。不在（0,0）
+        # R += pageL
+        # U += pageU
+        # D += pageU
         L, R = min(L, R), max(L, R)
         U, D = min(U, D), max(U, D)
         if xf['category_id'] == 0 and xf['score'] >= 0.3:
