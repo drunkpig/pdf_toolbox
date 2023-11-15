@@ -98,11 +98,11 @@ def collect_bbox_values(
             char_widths.append(char_width)
 
         if len(combined_lines) == 1:
-            # 如果这是页面上的第一个块，直接使用块的高度
+            # If this is the only line on the page, use the line height as the average line height
             if i == 0:
                 line_height = bbox[3] - bbox[1]
             else:
-                # 使用前一个块的下边界和当前块的上边界来计算行高
+                # Use the previous line's line height as the average line height
                 prev_bbox = combined_lines[i - 1]["bbox"]
                 line_height = bbox[1] - prev_bbox[1]
             line_heights.append(line_height)
@@ -112,7 +112,6 @@ def collect_bbox_values(
                 (bbox[1] - prev_bbox[1]) / 2, (prev_bbox[3] - bbox[3]) / 2
             )
             line_heights.append(line_height)
-
 
 
 def calculate_paragraph_metrics(combined_lines):
@@ -197,6 +196,35 @@ def combine_lines(block, y_tolerance):
 def is_regular_line(
     line_bbox, prev_line_bbox, next_line_bbox, avg_char_height, X0, X1, avg_char_width
 ):
+    """
+    This function checks if the line is a regular line
+
+    Parameters
+    ----------
+    line_bbox : list
+        bbox of the line
+    prev_line_bbox : list
+        bbox of the previous line
+    next_line_bbox : list
+        bbox of the next line
+    avg_char_height : float
+        average of char heights
+    X0 : float
+        median of x0 values, which represents the left average boundary of the page
+    X1 : float
+        median of x1 values, which represents the right average boundary of the page
+    avg_char_width : float
+        average of char widths
+
+    Returns
+    -------
+    regular_x0 : bool
+        True if x0 is regular, else False
+    regular_x1 : bool
+        True if x1 is regular, else False
+    regular_y : bool
+        True if y is regular, else False
+    """
     vertical_ratio = 1.2
     vertical_thres = vertical_ratio * avg_char_height * 2
 
@@ -226,6 +254,31 @@ def is_regular_line(
 def is_possible_start_of_para(
     line_bbox, prev_line_bbox, next_line_bbox, X0, X1, avg_char_width, avg_line_height
 ):
+    """
+    This function checks if the line is a possible start of a paragraph
+
+    Parameters
+    ----------
+    line_bbox : list
+        bbox of the line
+    prev_line_bbox : list
+        bbox of the previous line
+    next_line_bbox : list
+        bbox of the next line
+    X0 : float
+        median of x0 values, which represents the left average boundary of the page
+    X1 : float
+        median of x1 values, which represents the right average boundary of the page
+    avg_char_width : float
+        average of char widths
+    avg_line_height : float
+        average of line heights
+
+    Returns
+    -------
+    bool
+        True if the line is a possible start of a paragraph, False otherwise.
+    """
     horizontal_ratio = 1.5
     vertical_ratio = 0.6
     central_ratio = 2
@@ -289,6 +342,28 @@ def is_possible_start_of_para(
 
 
 def is_possible_end_of_para(line_bbox, next_line_bbox, X0, X1, avg_char_width):
+    """
+    This function checks if the line is a possible end of a paragraph
+
+    Parameters
+    ----------
+    line_bbox : list
+        bbox of the line
+    next_line_bbox : list
+        bbox of the next line
+    X0 : float
+        median of x0 values, which represents the left average boundary of the page
+    X1 : float
+        median of x1 values, which represents the right average boundary of the page
+    avg_char_width : float
+        average of char widths
+
+    Returns
+    -------
+    bool
+        True if the line is a possible end of a paragraph, False otherwise.
+    """
+
     N = 1
     x0, _, x1, y1 = line_bbox
     next_x0, next_y0, _, _ = next_line_bbox if next_line_bbox else (0, 0, 0, 0)
@@ -305,6 +380,21 @@ def is_possible_end_of_para(line_bbox, next_line_bbox, X0, X1, avg_char_width):
 
 
 def is_bbox_overlap(bbox1, bbox2):
+    """
+    This function checks if bbox1 and bbox2 overlap or not
+
+    Parameters
+    ----------
+    bbox1 : list
+        bbox1
+    bbox2 : list
+        bbox2
+
+    Returns
+    -------
+    bool
+        True if bbox1 and bbox2 overlap, else False
+    """
     x0_1, y0_1, x1_1, y1_1 = bbox1
     x0_2, y0_2, x1_2, y1_2 = bbox2
 
@@ -317,6 +407,19 @@ def is_bbox_overlap(bbox1, bbox2):
 
 
 def calculate_para_bbox(lines):
+    """
+    This function calculates the minimum bbox of the paragraph
+
+    Parameters
+    ----------
+    lines : list
+        lines
+
+    Returns
+    -------
+    para_bbox : list
+        bbox of the paragraph
+    """
     x0 = min(line["bbox"][0] for line in lines)
     y0 = min(line["bbox"][1] for line in lines)
     x1 = max(line["bbox"][2] for line in lines)
@@ -349,16 +452,22 @@ def process_block(
     structure:
 
     if is_segmented is True, the structure of processed_block is as follows:
+
     "block_0": {
-        "bbox": block_bbox, # pymupdf切分出来的默认文本块的 bbox
-        "text": block_text, # pymupdf切分出来的默认文本块的内容
-        "is_overlap": is_overlap, # pymupdf识别出来的block是否和图片、表格、公式的 bbox 重合，若重合则删除
-        "is_segmented": is_segmented, # 0: 没有经过process_block中逻辑的处理，block为pymupdf默认识别的结果，1: 经过process_block将block进行了分段，切分成了更多的para
-            "paras": {
+
+        "bbox": block_bbox, # bbox of the default text block recognized by PyMuPDF
+
+        "text": block_text, # content of the default text block recognized by PyMuPDF
+
+        "is_overlap": is_overlap, # whether the block recognized by PyMuPDF overlaps with the bbox of images, tables, and equations. If it overlaps, it will be deleted.
+
+        "is_segmented": is_segmented, # 0: the block is the default result recognized by PyMuPDF without being processed by the logic in process_block. 1: the block has been segmented into more paras by process_block.
+
+        "paras": {
             "para_0": {
                 "bbox": para_bbox,
                 "text": para_text,
-                "is_matched": is_matched, # 是否匹配是依据切分段落的代码得到的
+                "is_matched": is_matched, # whether the para is matched is based on the code for segmenting paragraphs
             },
             "para_1": {
                 "bbox": para_bbox,
@@ -371,9 +480,12 @@ def process_block(
                 "is_matched": is_matched,
             },
         },
+
         "bboxes_para": [para_bbox_0, para_bbox_1, para_bbox_2],
     },
+
     if is_segmented is False, the structure of processed_block is as follows:
+
     "block_1": {
         "bbox": block_bbox,
         "text": block_text,
@@ -381,7 +493,8 @@ def process_block(
         "is_overlap": is_overlap,
         "paras": {},
         "bboxes_para": [],
-    },"""
+    },
+    """
 
     # Extract the bounding box and text from the raw block
     bbox = raw_block["bbox"]
@@ -575,8 +688,6 @@ def parse_blocks_per_page(
     footer_bboxes : list
         Footer bounding boxes.
 
-
-
     Returns
     -------
     result_dict : dict
@@ -585,15 +696,15 @@ def parse_blocks_per_page(
     structure:
         "page_0": {
             "block_0": {
-                "bbox": block_bbox, # pymupdf 切分出来的文本块的 bbox
-                "text": block_text, # pymupdf 切分出来的文本块的内容
-                "is_segmented": is_segmented, # 0: Pymupdf 默认识别的文字段落，1: 经过自编写段落识别的文字段落
-                "is_overlap": is_overlap, # 是否被图片或者表格、公式的 bbox 覆盖
+                "bbox": block_bbox, # bbox of the text block recognized by PyMuPDF
+                "text": block_text, # content of the text block recognized by PyMuPDF
+                "is_segmented": is_segmented, # 0: text block recognized by PyMuPDF, 1: text block recognized by custom paragraph recognition
+                "is_overlap": is_overlap, # whether the text block is covered by the bbox of an image, table, or equation
                 "paras": {
                     "para_0": {
                         "bbox": para_bbox,
                         "text": para_text,
-                        "is_matched": is_matched, # 是否匹配是依据切分段落的代码得到的
+                        "is_matched": is_matched, # whether the paragraph is matched based on the custom paragraph recognition
                     },
                     "para_1": {
                         "bbox": para_bbox,
@@ -780,7 +891,30 @@ def compare_bbox(bbox1, bbox2, tolerance=1):
 def get_most_common_bboxes(
     bboxes, page_height, position="top", threshold=0.25, num_bboxes=3, min_frequency=2
 ):
-    # 根据位置筛选bbox
+    """
+    This function gets the most common bboxes from the bboxes
+
+    Parameters
+    ----------
+    bboxes : list
+        bboxes
+    page_height : float
+        height of the page
+    position : str, optional
+        "top" or "bottom", by default "top"
+    threshold : float, optional
+        threshold, by default 0.25
+    num_bboxes : int, optional
+        number of bboxes to return, by default 3
+    min_frequency : int, optional
+        minimum frequency of the bbox, by default 2
+
+    Returns
+    -------
+    common_bboxes : list
+        common bboxes
+    """
+    # Filter bbox by position
     if position == "top":
         filtered_bboxes = [bbox for bbox in bboxes if bbox[1] < page_height * threshold]
     else:
@@ -788,12 +922,12 @@ def get_most_common_bboxes(
             bbox for bbox in bboxes if bbox[3] > page_height * (1 - threshold)
         ]
 
-    # 找到最常见的bbox
+    # Find the most common bbox
     bbox_count = defaultdict(int)
     for bbox in filtered_bboxes:
         bbox_count[tuple(bbox)] += 1
 
-    # 获取频率最高的几个bbox，但只有当出现次数超过min_frequency时才考虑
+    # Get the most frequently occurring bbox, but only consider it when the frequency exceeds min_frequency
     common_bboxes = [
         bbox
         for bbox, count in sorted(
@@ -805,6 +939,20 @@ def get_most_common_bboxes(
 
 
 def detect_footer_header(result_dict):
+    """
+    This function detects the header and footer of the document
+
+    Parameters
+    ----------
+    result_dict : dict
+        result dictionary
+
+    Returns
+    -------
+    result_dict : dict
+        result dictionary
+    """
+
     def compare_bbox_with_list(bbox, bbox_list, tolerance=1):
         return any(
             all(abs(a - b) < tolerance for a, b in zip(bbox, common_bbox))
@@ -812,14 +960,17 @@ def detect_footer_header(result_dict):
         )
 
     def is_single_line_block(block):
-        # 根据块的宽度和高度判断
+        # Determine based on the width and height of the block
         block_width = block["X1"] - block["X0"]
         block_height = block["bbox"][3] - block["bbox"][1]
 
-        # 如果块的高度接近平均字符高度，且宽度较大，则认为是单行
-        return block_height <= block["avg_char_height"] * 1.5 and block_width > block["avg_char_width"] * 10
+        # If the height of the block is close to the average character height and the width is large, it is considered a single line
+        return (
+            block_height <= block["avg_char_height"] * 1.5
+            and block_width > block["avg_char_width"] * 10
+        )
 
-    # 遍历文档中的所有块
+    # Traverse all blocks in the document
     single_line_blocks = 0
     total_blocks = 0
     for page_id, blocks in result_dict.items():
@@ -830,8 +981,8 @@ def detect_footer_header(result_dict):
                     if is_single_line_block(block):
                         single_line_blocks += 1
 
-    # 如果大多数块是单行的，则跳过页眉页脚检测
-    if single_line_blocks / total_blocks > 0.5:  # 阈值可以调整
+    # If most of the blocks are single-line, skip the header and footer detection
+    if single_line_blocks / total_blocks > 0.5:  # 50% of the blocks are single-line
         print("Skipping header/footer detection for text-dense document.")
         return result_dict
 
@@ -856,8 +1007,8 @@ def detect_footer_header(result_dict):
 
     # bboxes in common_header_bboxes or common_footer_bboxes should occur at least in 80% of the pages
 
-    # print("common_header_bboxes: ", common_header_bboxes)
-    # print("common_footer_bboxes: ", common_footer_bboxes)
+    print("common_header_bboxes: ", common_header_bboxes)
+    print("common_footer_bboxes: ", common_footer_bboxes)
 
     # Detect and mark headers and footers
     for page_id, blocks in result_dict.items():
@@ -885,6 +1036,9 @@ def detect_footer_header(result_dict):
 
 
 def draw_block_border(page, block_color, block):
+    """
+    This function draws the border of the block
+    """
     if block["type"] == 0:  # Dealing with text blocks only
         block_bbox = block["bbox"]
         block_rect = fitz.Rect(block_bbox)
@@ -895,6 +1049,9 @@ def draw_block_border(page, block_color, block):
 
 
 def draw_paragraph_border(page, para_color, start_of_para, end_of_para, combined_lines):
+    """
+    This function draws the border of the paragraph
+    """
     all_lines_bbox = [
         combined_lines[i]["bbox"] for i in range(start_of_para, end_of_para + 1)
     ]
@@ -913,14 +1070,14 @@ def draw_paragraph_border(page, para_color, start_of_para, end_of_para, combined
 
 def draw_blocks_lines_spans(pdf_path, output_pdf_path):
     """
-    绘制文本块、行、字的边框.
+    Draw borders for text blocks, lines, and spans.
 
     Parameters
     ----------
     pdf_path : str
-        pdf文件路径
+        path of the input pdf file
     output_pdf_path : str
-        输出pdf文件路径
+        path of the output pdf file
 
 
     Returns
@@ -1143,18 +1300,20 @@ if __name__ == "__main__":
                     Orange: (1, 0.65, 0) - maximum intensity of red, medium intensity of green, no blue component
                 """
 
-                # 如果块是页眉或页脚，使用橙色标注
+                # If the block is a header or footer, mark it with orange color
                 if is_block_header or is_block_footer:
-                    rect_color = (1, 0.65, 0)  # 橙色
-                    rect_width = 2  # 页眉和页脚的边框宽度
+                    rect_color = (1, 0.65, 0)  # orange
+                    rect_width = 2  # border width for header and footer
                     block_rect = fitz.Rect(block["bbox"])
                     block_annot = page.add_rect_annot(block_rect)
                     block_annot.set_colors(stroke=rect_color)
                     block_annot.set_border(width=rect_width)
                     block_annot.update()
                 elif not is_block_segmented:
-                    # 绘制整个块的矩形
-                    rect_color = (0, 1, 1) if is_block_overlap else (0, 0, 1)  # 蓝色或青色
+                    # Draw the rectangle for the entire block
+                    rect_color = (
+                        (0, 1, 1) if is_block_overlap else (0, 0, 1)
+                    )  # blue or cyan
                     rect_width = 2 if is_block_overlap else 1
                     block_rect = fitz.Rect(block["bbox"])
                     block_annot = page.add_rect_annot(block_rect)
@@ -1162,13 +1321,13 @@ if __name__ == "__main__":
                     block_annot.set_border(width=rect_width)
                     block_annot.update()
                 else:
-                    # 绘制每个段落的矩形
+                    # Draw the rectangle for each paragraph
                     for para_key, para in block["paras"].items():
                         para_rect = fitz.Rect(para["bbox"])
                         para_annot = page.add_rect_annot(para_rect)
                         stroke_color = (
                             (0, 1, 0) if para["is_matched"] == 1 else (1, 0, 0)
-                        )  # 绿色或红色
+                        )  # green or red
                         para_annot.set_colors(stroke=stroke_color)
                         para_annot.set_border(width=0.5)
                         para_annot.update()
